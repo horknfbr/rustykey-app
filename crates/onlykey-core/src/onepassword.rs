@@ -520,21 +520,39 @@ pub fn fill_for_item(item: &ItemDetail) -> Result<ItemFill, SyncError> {
     })
 }
 
-/// The slot and the ordered `SetSlot` writes for `item` on a device of `kind`.
+/// Added to a slot's sync result when a DUO without PIN made sync leave fields out.
+pub const DUO_NO_PIN_NOTE: &str = "this OnlyKey DUO has no PIN, so only the password (or the TOTP if there is no password) was written";
+
+/// The slot, the ordered `SetSlot` writes for `item` on a device of `kind`, and a note for the
+/// user when fields were left out ([`DUO_NO_PIN_NOTE`]).
 ///
 /// Writes only label, URL, username, password and TOTP (delays and keys stay as set on the
-/// device); every limit and the DUO-without-PIN rules are checked before anything is returned.
+/// device); every limit is checked before anything is returned. On a DUO without PIN only the
+/// label and password are written (the TOTP only when there is no password), as SPEC §1Password
+/// sync Limits says; username and URL are dropped instead of failing the item.
 pub fn plan_for_item(
     item: &ItemDetail,
     kind: DeviceKind,
     pin_set: bool,
-) -> Result<(u8, Vec<Command>), SyncError> {
+) -> Result<(u8, Vec<Command>, Option<&'static str>), SyncError> {
     let slot = slot_from_tags(&item.tags).ok_or(SyncError::NoSlotTag)?;
     let max = max_slot(kind);
     if slot > max {
         return Err(SyncError::SlotOutOfRange { slot, max });
     }
     let mut fill = fill_for_item(item)?;
+    let duo_no_pin = kind == DeviceKind::Duo && !pin_set;
+    let mut note = None;
+    if duo_no_pin {
+        if fill.username.is_some() || fill.url.is_some() {
+            note = Some(DUO_NO_PIN_NOTE);
+        }
+        fill.username.zeroize();
+        fill.url.zeroize();
+        if fill.password.is_some() {
+            fill.totp.zeroize();
+        }
+    }
     let form = Zeroizing::new(SlotForm {
         label: fill.label.take(),
         url: fill.url.take(),
@@ -543,8 +561,7 @@ pub fn plan_for_item(
         totp: fill.totp.take(),
         ..SlotForm::default()
     });
-    let duo_no_pin = kind == DeviceKind::Duo && !pin_set;
-    Ok((slot, build_slot_commands(slot, &form, duo_no_pin)?))
+    Ok((slot, build_slot_commands(slot, &form, duo_no_pin)?, note))
 }
 
 #[cfg(test)]
@@ -633,7 +650,8 @@ mod tests {
     /// Full mapping: label field beats title, primary URL first, otpauth secret, write order.
     #[test]
     fn plan_full_login() {
-        let (slot, cmds) = plan_for_item(&item(ITEM), DeviceKind::Duo, true).expect("plan");
+        let (slot, cmds, note) = plan_for_item(&item(ITEM), DeviceKind::Duo, true).expect("plan");
+        assert_eq!(note, None);
         assert_eq!(slot, 1);
         assert!(
             cmds.iter()
@@ -666,7 +684,7 @@ mod tests {
     fn plan_minimal_item() {
         let json = r#"{"id":"z","title":"Pw Only","version":1,"tags":["onlykey/slot-2"],
             "fields":[{"type":"CONCEALED","purpose":"PASSWORD","value":"pw"}]}"#;
-        let (slot, cmds) = plan_for_item(&item(json), DeviceKind::Classic, true).unwrap();
+        let (slot, cmds, _) = plan_for_item(&item(json), DeviceKind::Classic, true).unwrap();
         assert_eq!(slot, 2);
         assert_eq!(
             writes(&cmds),
@@ -721,24 +739,25 @@ mod tests {
             ),
             SyncError::Slot(SlotError::NotLatin1)
         );
+        // DUO without PIN: username, URL and (next to a password) TOTP are left out, not refused.
+        let duo = |i: &ItemDetail| {
+            let (_, cmds, note) = plan_for_item(i, DeviceKind::Duo, false).expect("plan");
+            (writes(&cmds), note)
+        };
+        let label = (FieldId::Label as u8, b"T".to_vec());
+        let password = (FieldId::Password as u8, b"pw".to_vec());
         assert_eq!(
-            plan(
-                &with(slot1, &format!("{pw},{}", otp("JBSWY3DPEHPK3PXP")), "T"),
-                DeviceKind::Duo,
-                false
-            ),
-            SyncError::Slot(SlotError::DuoNoPinMixed)
+            duo(&with(
+                slot1,
+                &format!("{user},{pw},{}", otp("JBSWY3DPEHPK3PXP")),
+                "T"
+            )),
+            (vec![label.clone(), password.clone()], Some(DUO_NO_PIN_NOTE))
         );
         assert_eq!(
-            plan(
-                &with(slot1, &format!("{user},{pw}"), "T"),
-                DeviceKind::Duo,
-                false
-            ),
-            SyncError::Slot(SlotError::DuoNoPinUsernameUrl)
+            duo(&with(slot1, pw, "T")),
+            (vec![label.clone(), password], None)
         );
-        // DUO without PIN: a password-only item is fine.
-        assert!(plan_for_item(&with(slot1, pw, "T"), DeviceKind::Duo, false).is_ok());
         assert!(matches!(
             plan(
                 &with(slot1, &otp("otpauth://hotp/x?secret=AAAA&counter=1"), "T"),
@@ -751,6 +770,27 @@ mod tests {
         assert_eq!(
             plan(&with(slot1, &otp(&long_secret), "T"), DeviceKind::Duo, true),
             SyncError::Slot(SlotError::TotpTooLong(62))
+        );
+    }
+
+    /// DUO without PIN and no password: label plus TOTP; the username is dropped with a note.
+    #[test]
+    fn plan_duo_no_pin_totp_only() {
+        let json = r#"{"id":"z","title":"T","tags":["onlykey/slot-1"],"fields":[
+            {"type":"STRING","purpose":"USERNAME","value":"me"},
+            {"type":"OTP","value":"otpauth://totp/x?secret=JBSWY3DPEHPK3PXP"}]}"#;
+        let (_, cmds, note) = plan_for_item(&item(json), DeviceKind::Duo, false).unwrap();
+        assert_eq!(note, Some(DUO_NO_PIN_NOTE));
+        assert_eq!(
+            writes(&cmds),
+            [
+                (FieldId::Label as u8, b"T".to_vec()),
+                (FieldId::TfaType as u8, vec![b'g']),
+                (
+                    FieldId::TfaUsername as u8,
+                    crate::encoding::base32_to_bytes("JBSWY3DPEHPK3PXP").unwrap()
+                ),
+            ]
         );
     }
 

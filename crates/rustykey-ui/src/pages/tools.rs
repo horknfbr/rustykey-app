@@ -1,10 +1,10 @@
 //! Tools page: app update settings, WebCrypt and OnlyKey Agent links (`Tools.tsx`, `AppUpdateSettings.tsx`).
 //! Also the small helpers the Keys / Backup / Firmware / Preferences / Advanced pages share.
 
-use crate::backend::{Backend, Platform, backend};
+use crate::backend::{Backend, Platform, PrefsPatch, backend};
 use crate::components::{Button, HelpTip};
 use crate::state::use_app;
-use crate::updates::{Phase, app_check_now, app_start_auto_check, app_updates};
+use crate::updates::{Phase, app_check_now, app_updates};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use onlykey_core::api::{DeviceKind, Snapshot};
@@ -235,16 +235,14 @@ fn AppUpdateSettings() -> impl IntoView {
                         type="checkbox"
                         prop:checked=auto
                         on:change=move |ev| {
-                            let on = event_target_checked(&ev);
-                            let mut prefs = app.prefs.get_untracked();
-                            let was_on = prefs.auto_update;
-                            prefs.auto_update = on;
+                            // Turning it on starts the auto-check from `UpdateHosts`.
+                            let patch = PrefsPatch {
+                                auto_update: Some(event_target_checked(&ev)),
+                                ..PrefsPatch::default()
+                            };
                             spawn_local(async move {
-                                let _ = app.save_prefs(prefs).await;
+                                let _ = app.save_prefs(patch).await;
                             });
-                            if on && !was_on {
-                                app_start_auto_check(true);
-                            }
                         }
                     />
                     <span>"Automatically check for app updates"</span>

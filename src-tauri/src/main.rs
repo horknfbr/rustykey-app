@@ -69,11 +69,15 @@ fn main() {
             });
             app.manage(svc);
 
-            let prefs = prefs::load(app.handle());
-            prefs::apply_autostart(app.handle(), prefs.autostart);
+            // `autostart` mirrors the OS login item; only a user toggle ever changes the OS.
+            let mut prefs = prefs::load(app.handle());
+            prefs.autostart = prefs::os_autostart(app.handle());
             app.manage::<prefs::PrefsState>(Mutex::new(prefs));
 
-            tray::init(app.handle())?;
+            // No tray (e.g. Linux without a StatusNotifier host) must not stop the app.
+            if let Err(e) = tray::init(app.handle()) {
+                eprintln!("tray: {e}");
+            }
             let args: Vec<String> = std::env::args().collect();
             if window::hidden_arg(&args) {
                 window::hide(app.handle());
@@ -99,6 +103,7 @@ fn main() {
             host::pick_text_file,
             host::save_text_file,
             host::open_url,
+            window::show_window,
             updates::app_update_check,
             updates::app_update_install,
             updates::fw_check,

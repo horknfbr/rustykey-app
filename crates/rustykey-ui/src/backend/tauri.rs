@@ -1,6 +1,6 @@
 //! Desktop backend: Tauri commands via `window.__TAURI__.core.invoke`, events via `__TAURI__.event.listen`.
 
-use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs};
+use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs, PrefsPatch};
 use onlykey_core::api::{Command, DeviceError, Event, Reply, Snapshot};
 use onlykey_core::onepassword::{ItemFill, LinkedSlot, OpLogin, OpStatus, SlotSyncResult};
 use serde::{Serialize, de::DeserializeOwned};
@@ -120,15 +120,34 @@ impl Backend for TauriBackend {
         call("prefs_get", NoArgs {}).await.unwrap_or_default()
     }
 
-    /// `prefs_set { prefs }`.
-    async fn prefs_set(&self, prefs: Prefs) -> Result<(), String> {
+    /// `prefs_set { patch }` (only the changed keys); the host answers with the merged prefs.
+    async fn prefs_set(&self, patch: PrefsPatch) -> Result<Prefs, String> {
         /// Args of `prefs_set`.
         #[derive(Serialize)]
         struct Args {
-            /// The prefs.
-            prefs: Prefs,
+            /// The changed keys.
+            patch: PrefsPatch,
         }
-        call("prefs_set", Args { prefs }).await.map_err(error_text)
+        call("prefs_set", Args { patch }).await.map_err(error_text)
+    }
+
+    /// Listens on `host://prefs-changed` (full prefs); the closure lives for the app's lifetime.
+    fn on_prefs_changed(&self, f: impl Fn(Prefs) + 'static) {
+        let handler = Closure::<dyn Fn(JsValue)>::new(move |msg: JsValue| {
+            let payload = js_sys::Reflect::get(&msg, &"payload".into()).unwrap_or(msg);
+            if let Ok(prefs) = serde_wasm_bindgen::from_value(payload) {
+                f(prefs);
+            }
+        });
+        wasm_bindgen_futures::spawn_local(async move {
+            let _ = listen("host://prefs-changed", &handler).await;
+            handler.forget();
+        });
+    }
+
+    /// `show_window`.
+    async fn show_window(&self) {
+        let _: Result<(), _> = call("show_window", NoArgs {}).await;
     }
 
     /// `pick_text_file { filters }`.
@@ -229,6 +248,19 @@ impl Backend for TauriBackend {
             slots: Option<Vec<u8>>,
         }
         call("op_sync", Args { slots }).await.map_err(error_text)
+    }
+
+    /// `op_set_account { account }`.
+    async fn op_set_account(&self, account: Option<String>) -> Result<(), String> {
+        /// Args of `op_set_account`.
+        #[derive(Serialize)]
+        struct Args {
+            /// Account ID, or `None` for the CLI default.
+            account: Option<String>,
+        }
+        call("op_set_account", Args { account })
+            .await
+            .map_err(error_text)
     }
 
     /// `op_logins`.

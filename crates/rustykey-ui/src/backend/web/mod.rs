@@ -3,7 +3,7 @@
 
 mod hid;
 
-use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs};
+use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs, PrefsPatch};
 use futures::channel::oneshot;
 use onlykey_core::api::{Command, DeviceError, Event, Reply, Snapshot};
 use std::cell::RefCell;
@@ -71,15 +71,17 @@ impl Backend for WebBackend {
             .unwrap_or_default()
     }
 
-    /// Stores prefs JSON in `localStorage`.
-    async fn prefs_set(&self, prefs: Prefs) -> Result<(), String> {
+    /// Merges `patch` into the `localStorage` prefs JSON and returns the result.
+    async fn prefs_set(&self, patch: PrefsPatch) -> Result<Prefs, String> {
         let fail = || "Could not save preferences in this browser.".to_string();
+        let prefs = self.prefs_get().await.merged(&patch);
         let value = serde_wasm_bindgen::to_value(&prefs).map_err(|_| fail())?;
         let text: String = js_sys::JSON::stringify(&value).map_err(|_| fail())?.into();
         storage()
             .ok_or_else(fail)?
             .set_item(PREFS_KEY, &text)
-            .map_err(|_| fail())
+            .map_err(|_| fail())?;
+        Ok(prefs)
     }
 
     /// Hidden `<input type=file>` limited to `accept`; `None` if cancelled, the extension is not

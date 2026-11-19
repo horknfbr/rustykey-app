@@ -1,13 +1,30 @@
 //! Sidebar (logo, theme toggle, tabs, status block) and the DeviceMessages terminal (`App.tsx`, `DeviceMessages.tsx`).
 
+use crate::backend::PrefsPatch;
 use crate::state::{Tab, use_app};
 use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use onlykey_core::api::DeviceState;
+use onlykey_core::api::{DeviceKind, DeviceState, Snapshot};
+use onlykey_core::device_type::DeviceType;
+use onlykey_core::protocol::connected_device_label;
 
 /// Lines the terminal shows at once.
 const MESSAGE_LINES: usize = 5;
+
+/// Sidebar device line (`deviceProduct.ts:10-27`): product, firmware, and a bootloader / uninitialized note.
+fn device_label(s: &Snapshot) -> String {
+    let ty = match (s.state, s.kind) {
+        (DeviceState::Bootloader, _) => DeviceType::Bootloader,
+        (_, DeviceKind::Duo) => DeviceType::Duo,
+        _ => DeviceType::Classic,
+    };
+    connected_device_label(
+        ty,
+        s.firmware.as_deref().unwrap_or(""),
+        s.state != DeviceState::Uninitialized,
+    )
+}
 
 /// Left column: brand row, tab list, device status.
 #[component]
@@ -15,13 +32,7 @@ pub fn Sidebar() -> impl IntoView {
     let app = use_app();
     let snap = app.snapshot;
     let connected = move || snap.with(|s| s.state != DeviceState::Disconnected);
-    let device = move || {
-        snap.with(|s| {
-            format!("{} {}", s.product_name, s.firmware.as_deref().unwrap_or(""))
-                .trim()
-                .to_string()
-        })
-    };
+    let device = move || snap.with(device_label);
     let mode = move || match snap.with(|s| s.state) {
         DeviceState::Bootloader => "Bootloader",
         DeviceState::ConfigMode => "Config mode",
@@ -91,10 +102,13 @@ fn ThemeToggle() -> impl IntoView {
             title=label
             aria-label=label
             on:click=move |_| {
-                let mut prefs = app.prefs.get_untracked();
-                prefs.theme = if prefs.theme == "light" { "dark" } else { "light" }.into();
+                let theme = if dark() { "light" } else { "dark" };
+                let patch = PrefsPatch {
+                    theme: Some(theme.into()),
+                    ..PrefsPatch::default()
+                };
                 spawn_local(async move {
-                    let _ = app.save_prefs(prefs).await;
+                    let _ = app.save_prefs(patch).await;
                 });
             }
         >
@@ -197,5 +211,40 @@ pub fn DeviceMessages() -> impl IntoView {
                 </button>
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Sidebar device line.
+
+    use super::*;
+
+    /// A connected snapshot of `kind` in `state` with `firmware`.
+    fn snap(state: DeviceState, kind: DeviceKind, firmware: Option<&str>) -> Snapshot {
+        Snapshot {
+            state,
+            kind,
+            firmware: firmware.map(Into::into),
+            ..Snapshot::default()
+        }
+    }
+
+    /// Bootloader and uninitialized devices get their note; others show product and firmware.
+    #[test]
+    fn device_label_notes() {
+        use DeviceKind::*;
+        use DeviceState::*;
+        let duo = snap(Unlocked, Duo, Some("v3.0.4-prodp"));
+        assert_eq!(device_label(&duo), "OnlyKey Duo v3.0.4-prodp");
+        assert_eq!(
+            device_label(&snap(Bootloader, Classic, None)),
+            "OnlyKey (bootloader)"
+        );
+        assert_eq!(
+            device_label(&snap(Uninitialized, Duo, Some("v3.0.4-prodp"))),
+            "OnlyKey Duo v3.0.4-prodp (uninitialized)"
+        );
+        assert_eq!(device_label(&snap(Locked, Classic, None)), "OnlyKey");
     }
 }

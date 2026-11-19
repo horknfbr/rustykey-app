@@ -27,6 +27,9 @@ pub fn FirmwareLoader(
     /// True inside the Setup wizard.
     #[prop(optional)]
     in_setup: bool,
+    /// Called after a load finished or was handed to the bootloader (Setup returns to its landing page).
+    #[prop(into, optional)]
+    on_done: Option<Callback<()>>,
 ) -> impl IntoView {
     let app = use_app();
     let store = fw();
@@ -73,16 +76,23 @@ pub fn FirmwareLoader(
             }
             .await;
             match result {
-                Ok(true) => status.set(Some("Firmware load complete!".into())),
-                Ok(false) => status.set(Some(
-                    "Device rebooting to bootloader. Reconnect and the update will resume automatically.".into(),
-                )),
+                Ok(done) => {
+                    status.try_set(Some(if done {
+                        "Firmware load complete!".into()
+                    } else {
+                        "Device rebooting to bootloader. Reconnect and the update will resume automatically.".into()
+                    }));
+                    // Skip it if the session reset meanwhile: the caller (and its callback) is gone.
+                    if let Some(f) = on_done.filter(|_| loading.try_get_untracked().is_some()) {
+                        f.run(());
+                    }
+                }
                 Err(e) => {
-                    status.set(None);
-                    error.set(Some(e));
+                    status.try_set(None);
+                    error.try_set(Some(e));
                 }
             }
-            loading.set(false);
+            loading.try_set(false);
         });
     };
 

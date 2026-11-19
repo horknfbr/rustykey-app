@@ -25,6 +25,34 @@ const MAX_REDIRECTS: usize = 10;
 const RELEASE_PAGE: &str = "https://github.com/horknfbr/rustykey-app/releases/latest";
 /// Any firmware network failure (TS `asFirmwareUpdateError` fallback); no UI keyword, stays quiet on auto-checks.
 const NETWORK_ERROR: &str = "Could not reach the firmware server.";
+/// Largest firmware file accepted (real STD images are well under 1 MB).
+const MAX_FIRMWARE_BYTES: usize = 4 * 1024 * 1024;
+/// Shown when the firmware file is over [`MAX_FIRMWARE_BYTES`]; "refused" pops the dialog on an auto-check.
+const TOO_LARGE: &str = "Firmware download refused: the file is larger than 4 MB.";
+
+/// The TS `firmwareUpdateUserMessage` text for a firmware error, picked by its TS code. Digest
+/// messages keep "SHA-256", location ones "refused" and parse ones "parsed" (see the module doc).
+fn fw_message(e: &FirmwareError) -> String {
+    match e.code() {
+        "not-https" | "host-not-allowed" => {
+            "Firmware download refused: the location is not an allowed HTTPS GitHub path."
+        }
+        "missing-sha256" => {
+            "The firmware release did not include a SHA-256 checksum. The download was not started."
+        }
+        "sha256-mismatch" => {
+            "The downloaded firmware failed integrity verification (SHA-256). It was not sent to OnlyKey."
+        }
+        "invalid-firmware" => "The firmware file could not be parsed.",
+        _ => "The firmware release listing was not valid.",
+    }
+    .into()
+}
+
+/// TS text for a non-2xx firmware server answer (`http-release` / `http-firmware`).
+fn http_message(status: u16) -> String {
+    format!("Could not reach the firmware server (HTTP {status}).")
+}
 
 /// Session-only update state, managed by Tauri; nothing here is persisted.
 #[derive(Default)]
@@ -191,44 +219,56 @@ fn fw_client() -> Result<reqwest::Client, String> {
 }
 
 /// GETs an allowlisted firmware URL (`fetchFirmware`): request URL guard, checked hops, final URL guard, 2xx.
-/// `failed` prefixes an HTTP status error.
 async fn fw_get(
     client: &reqwest::Client,
     url: &str,
     timeout: Duration,
-    failed: &str,
 ) -> Result<reqwest::Response, String> {
-    firmware::guard_request_url(url).map_err(|e| e.to_string())?;
+    firmware::guard_request_url(url).map_err(|e| fw_message(&e))?;
     let mut request = client.get(url).timeout(timeout);
     if url == FW_API_URL {
         request = request.header(reqwest::header::ACCEPT, "application/vnd.github+json");
     }
     let response = request.send().await.map_err(|e| {
         if e.is_redirect() {
-            FirmwareError::HostNotAllowed.to_string()
+            fw_message(&FirmwareError::HostNotAllowed)
         } else {
             NETWORK_ERROR.to_string()
         }
     })?;
-    firmware::guard_final_url(response.url().as_str()).map_err(|e| e.to_string())?;
+    firmware::guard_final_url(response.url().as_str()).map_err(|e| fw_message(&e))?;
     if !response.status().is_success() {
-        return Err(format!("{failed} ({}).", response.status().as_u16()));
+        return Err(http_message(response.status().as_u16()));
     }
     Ok(response)
 }
 
+/// Reads the body, refusing it ([`TOO_LARGE`]) once it passes `max` bytes, by header or by count.
+async fn read_capped(mut response: reqwest::Response, max: usize) -> Result<Vec<u8>, String> {
+    if response.content_length().is_some_and(|n| n > max as u64) {
+        return Err(TOO_LARGE.into());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| NETWORK_ERROR.to_string())?
+    {
+        if bytes.len() + chunk.len() > max {
+            return Err(TOO_LARGE.into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
 /// Fetches the latest firmware release JSON (15 s).
 async fn fetch_release(client: &reqwest::Client) -> Result<String, String> {
-    fw_get(
-        client,
-        FW_API_URL,
-        CHECK_TIMEOUT,
-        "Firmware release lookup failed",
-    )
-    .await?
-    .text()
-    .await
-    .map_err(|_| NETWORK_ERROR.to_string())
+    fw_get(client, FW_API_URL, CHECK_TIMEOUT)
+        .await?
+        .text()
+        .await
+        .map_err(|_| NETWORK_ERROR.to_string())
 }
 
 /// Classifies `release_json` against the device's `current` version (`checkFirmwareUpdate`).
@@ -236,11 +276,11 @@ fn release_result(current: &str, release_json: &str) -> Result<Option<FirmwareRe
     match firmware::check_release(current, release_json) {
         ReleaseCheck::Current { .. } => Ok(None),
         ReleaseCheck::Available { latest, .. } => Ok(Some(FirmwareRelease { version: latest })),
-        ReleaseCheck::InvalidRelease => Err(FirmwareError::InvalidRelease.to_string()),
-        ReleaseCheck::MissingStdAsset => Err(firmware::select_release_asset(release_json)
-            .err()
-            .unwrap_or(FirmwareError::InvalidRelease)
-            .to_string()),
+        ReleaseCheck::InvalidRelease => Err(fw_message(&FirmwareError::InvalidRelease)),
+        // TS `missing-std-asset`.
+        ReleaseCheck::MissingStdAsset => {
+            Err("This firmware release does not include a standard (STD) image.".into())
+        }
     }
 }
 
@@ -266,7 +306,7 @@ pub async fn fw_check(
 
 /// Checks downloaded `bytes` against the asset's SHA-256 and parses them into blocks; errors as UI text.
 fn verify_firmware(asset: &firmware::ReleaseAsset, bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
-    firmware::verify_download(bytes, &asset.sha256).map_err(|e| e.to_string())
+    firmware::verify_download(bytes, &asset.sha256).map_err(|e| fw_message(&e))
 }
 
 /// `fw_download`: the latest STD firmware (60 s, allowlisted hops, SHA-256 required and matched) as blocks for
@@ -275,22 +315,14 @@ fn verify_firmware(asset: &firmware::ReleaseAsset, bytes: &[u8]) -> Result<Vec<V
 pub async fn fw_download(state: State<'_, Updates>) -> Result<Vec<Vec<u8>>, String> {
     let client = fw_client()?;
     let json = cached_or_fetch(&state.fw_release, false, || fetch_release(&client)).await?;
-    let asset = firmware::select_release_asset(&json).map_err(|e| e.to_string())?;
+    let asset = firmware::select_release_asset(&json).map_err(|e| fw_message(&e))?;
     if let Some((version, blocks)) = lock(&state.fw_blocks).as_ref()
         && *version == asset.version
     {
         return Ok(blocks.clone());
     }
-    let bytes = fw_get(
-        &client,
-        &asset.download_url,
-        DOWNLOAD_TIMEOUT,
-        "Firmware download failed",
-    )
-    .await?
-    .bytes()
-    .await
-    .map_err(|_| NETWORK_ERROR.to_string())?;
+    let response = fw_get(&client, &asset.download_url, DOWNLOAD_TIMEOUT).await?;
+    let bytes = read_capped(response, MAX_FIRMWARE_BYTES).await?;
     let blocks = verify_firmware(&asset, &bytes)?;
     *lock(&state.fw_blocks) = Some((asset.version, blocks.clone()));
     Ok(blocks)
@@ -355,11 +387,7 @@ mod tests {
             MAX_REDIRECTS
         ));
         // A refused hop reads as "refused" so an auto-check still shows it.
-        assert!(
-            FirmwareError::HostNotAllowed
-                .to_string()
-                .contains("refused")
-        );
+        assert!(fw_message(&FirmwareError::HostNotAllowed).contains("refused"));
     }
 
     /// Matching digest gives blocks; missing or wrong digest is refused with "SHA-256" in the message.
@@ -373,7 +401,7 @@ mod tests {
         );
 
         let missing = firmware::select_release_asset(&release(None)).unwrap_err();
-        assert!(missing.to_string().contains("SHA-256"));
+        assert!(fw_message(&missing).contains("SHA-256"));
 
         let wrong = firmware::select_release_asset(&release(Some(&sha(b"other")))).unwrap();
         assert!(
@@ -396,10 +424,53 @@ mod tests {
         );
         assert!(release_result("v3.0.4", "{").is_err());
         let no_std = r#"{"tag_name":"v3.0.5","assets":[]}"#;
-        assert!(
-            release_result("v3.0.4", no_std)
-                .unwrap_err()
-                .contains("Signed_OnlyKey_3_0_5_STD.txt")
+        assert_eq!(
+            release_result("v3.0.4", no_std).unwrap_err(),
+            "This firmware release does not include a standard (STD) image."
+        );
+    }
+
+    /// Firmware errors read as the TS user messages, keeping the words the UI keys on.
+    #[test]
+    fn user_messages() {
+        let cases = [
+            (FirmwareError::NotHttps, "refused"),
+            (FirmwareError::AssetNotHttps("x".into()), "refused"),
+            (FirmwareError::MissingSha256, "SHA-256"),
+            (FirmwareError::Sha256Mismatch, "SHA-256"),
+            (FirmwareError::InvalidFirmware("bad hex".into()), "parsed"),
+        ];
+        for (e, word) in cases {
+            assert!(fw_message(&e).contains(word), "{e:?}");
+        }
+        assert_eq!(
+            fw_message(&FirmwareError::MissingAsset("x".into())),
+            "The firmware release listing was not valid."
+        );
+        assert_eq!(
+            http_message(404),
+            "Could not reach the firmware server (HTTP 404)."
+        );
+        assert!(TOO_LARGE.contains("refused"));
+    }
+
+    /// Bodies over the cap are refused, by `Content-Length` or by counting; others pass whole.
+    #[test]
+    fn download_size_cap() {
+        let read = |body: Vec<u8>, max| {
+            let response = reqwest::Response::from(http::Response::new(body));
+            tauri::async_runtime::block_on(read_capped(response, max))
+        };
+        assert_eq!(read(vec![7; 10], 10), Ok(vec![7; 10]));
+        assert_eq!(read(vec![7; 11], 10), Err(TOO_LARGE.into()));
+        let streamed = reqwest::Body::wrap_stream(futures_util::stream::iter([
+            Ok::<_, std::io::Error>(vec![1u8; 6]),
+            Ok(vec![2u8; 6]),
+        ]));
+        let response = reqwest::Response::from(http::Response::new(streamed));
+        assert_eq!(
+            tauri::async_runtime::block_on(read_capped(response, 10)),
+            Err(TOO_LARGE.into())
         );
     }
 
@@ -447,9 +518,11 @@ mod tests {
         );
         let blocks = tauri::async_runtime::block_on(async {
             let client = fw_client()?;
-            let res = fw_get(&client, &asset.download_url, DOWNLOAD_TIMEOUT, "failed").await?;
+            let res = fw_get(&client, &asset.download_url, DOWNLOAD_TIMEOUT).await?;
             println!("final firmware URL host: {:?}", res.url().host_str());
-            verify_firmware(&asset, &res.bytes().await.map_err(|e| e.to_string())?)
+            let bytes = read_capped(res, MAX_FIRMWARE_BYTES).await?;
+            println!("firmware file: {} bytes", bytes.len());
+            verify_firmware(&asset, &bytes)
         })
         .unwrap();
         println!("downloaded and verified {} blocks", blocks.len());

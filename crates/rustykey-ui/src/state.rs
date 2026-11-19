@@ -1,14 +1,32 @@
 //! App-wide state (Leptos context): device snapshot, messages, working dialog, tab, prefs. Never holds secrets.
 
-use crate::backend::{Backend, Prefs, backend};
+use crate::backend::{Backend, Prefs, PrefsPatch, backend};
 use futures::channel::oneshot;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use onlykey_core::api::{DeviceState, Event, Snapshot};
+use onlykey_core::onepassword::{LinkedSlot, OpStatus};
 use std::future::Future;
 
 /// Most device messages kept (newest first).
 const MAX_MESSAGES: usize = 50;
+/// WorkingDialog messages of firmware loads and restores; a device error closes these.
+const STREAM_WORKING_PREFIXES: [&str; 5] = [
+    "Loading firmware",
+    "Triggering reboot",
+    "Preparing restore",
+    "Sending backup",
+    "Applying backup",
+];
+
+/// Adds `text` as the newest message unless it repeats the newest one (stops the locked-state flood).
+fn push_message(messages: &mut Vec<String>, text: String) {
+    if messages.first() == Some(&text) {
+        return;
+    }
+    messages.insert(0, text);
+    messages.truncate(MAX_MESSAGES);
+}
 
 /// Sidebar tabs, in display order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,8 +112,18 @@ pub struct AppState {
     pub working: RwSignal<Option<Working>>,
     /// Selected sidebar tab.
     pub tab: RwSignal<Tab>,
-    /// Stored prefs (theme lives here).
+    /// Stored prefs (theme lives here); replaced on `host://prefs-changed` and on window focus.
     pub prefs: RwSignal<Prefs>,
+    /// True once `prefs` holds the host's prefs (not the defaults); gates the automatic update checks.
+    pub prefs_loaded: RwSignal<bool>,
+    /// Last device error that is not a DUO PIN error (`Event::Error`), shown as a toast; cleared on a new epoch.
+    pub error: RwSignal<Option<String>>,
+    /// Selected DUO profile (index into `DUO_PROFILES`); reset to the first on a new epoch.
+    pub duo_profile: RwSignal<usize>,
+    /// 1Password CLI status, read once per app run when the Slots page first needs it.
+    pub op_status: RwSignal<Option<OpStatus>>,
+    /// 1Password link status from the last "Check 1Password links" / sync; `None` = not checked this session.
+    pub op_links: RwSignal<Option<Vec<LinkedSlot>>>,
     /// Last DUO unlock error text ("Incorrect PIN", "…password attempts…").
     pub pin_error: RwSignal<Option<String>>,
     /// Open ConfirmDialog, if any.
@@ -163,6 +191,11 @@ impl AppState {
             working: RwSignal::new(None),
             tab: RwSignal::new(Tab::Setup),
             prefs: RwSignal::new(Prefs::default()),
+            prefs_loaded: RwSignal::new(false),
+            error: RwSignal::new(None),
+            duo_profile: RwSignal::new(0),
+            op_status: RwSignal::new(None),
+            op_links: RwSignal::new(None),
             pin_error: RwSignal::new(None),
             confirm: RwSignal::new(None),
             setup_blocks_firmware_prompt: RwSignal::new(false),
@@ -170,26 +203,50 @@ impl AppState {
         };
         provide_context(state);
         backend().on_event(move |e| state.on_event(e));
+        backend().on_prefs_changed(move |p| state.set_prefs(p));
+        // The tray or another window may have changed prefs while this one was in the background.
+        let focus = window_event_listener(leptos::ev::focus, move |_| {
+            spawn_local(async move { state.set_prefs(backend().prefs_get().await) });
+        });
+        std::mem::forget(focus);
         spawn_local(async move {
-            let prefs = backend().prefs_get().await;
-            apply_theme(&prefs.theme);
-            state.prefs.set(prefs);
+            state.set_prefs(backend().prefs_get().await);
+            state.prefs_loaded.set(true);
             state.apply_snapshot(backend().snapshot().await);
         });
         state
+    }
+
+    /// Replaces the prefs with the host's copy and applies the theme (no notify when unchanged).
+    fn set_prefs(self, prefs: Prefs) {
+        apply_theme(&prefs.theme);
+        if self.prefs.with_untracked(|p| *p != prefs) {
+            self.prefs.set(prefs);
+        }
     }
 
     /// Routes one backend event into the signals.
     fn on_event(self, event: Event) {
         match event {
             Event::Snapshot(s) => self.apply_snapshot(s),
-            Event::Message { text } => self.messages.update(|m| {
-                m.insert(0, text);
-                m.truncate(MAX_MESSAGES);
-            }),
+            Event::Message { text } => self.messages.update(|m| push_message(m, text)),
             Event::Error { text } => {
+                self.messages.update(|m| push_message(m, text.clone()));
+                // A failed firmware resume or restore must not leave the WorkingDialog up (`useDeviceStore.ts:349-357`).
+                let streaming = self.working.with_untracked(|w| {
+                    w.as_ref().is_some_and(|w| {
+                        STREAM_WORKING_PREFIXES
+                            .iter()
+                            .any(|p| w.message.starts_with(p))
+                    })
+                });
+                if streaming {
+                    self.working.set(None);
+                }
                 if text.contains("password attempts") || text.contains("Incorrect PIN") {
                     self.pin_error.set(Some(text));
+                } else {
+                    self.error.set(Some(text));
                 }
             }
             Event::Progress { percent, .. } => self.working.update(|w| {
@@ -207,6 +264,9 @@ impl AppState {
             self.messages.set(Vec::new());
             self.working.set(None);
             self.confirm.set(None);
+            self.error.set(None);
+            self.duo_profile.set(0);
+            self.op_links.set(None);
         }
         if new.state != old.state || new.session_epoch != old.session_epoch {
             self.pin_error.set(None);
@@ -220,11 +280,20 @@ impl AppState {
         self.snapshot.set(new);
     }
 
-    /// Saves a prefs change (and applies the theme); returns the host's error text on failure.
-    pub async fn save_prefs(self, prefs: Prefs) -> Result<(), String> {
-        apply_theme(&prefs.theme);
-        self.prefs.set(prefs.clone());
-        backend().prefs_set(prefs).await
+    /// Saves only the keys in `patch` (shown at once, then replaced by the host's merged prefs);
+    /// on failure re-reads the stored prefs and returns the host's error text.
+    pub async fn save_prefs(self, patch: PrefsPatch) -> Result<(), String> {
+        self.set_prefs(self.prefs.get_untracked().merged(&patch));
+        match backend().prefs_set(patch).await {
+            Ok(prefs) => {
+                self.set_prefs(prefs);
+                Ok(())
+            }
+            Err(e) => {
+                self.set_prefs(backend().prefs_get().await);
+                Err(e)
+            }
+        }
     }
 
     /// Shows the WorkingDialog with `message` while `fut` runs.
@@ -262,7 +331,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    //! Default-tab rules (`useDeviceStore.ts:136-145`, `:206-285`).
+    //! Default-tab rules (`useDeviceStore.ts:136-145`, `:206-285`) and the message list.
 
     use super::*;
     use DeviceState::*;
@@ -300,5 +369,21 @@ mod tests {
             Tab::Setup
         );
         assert_eq!(next_tab(&unlocked, &unlocked, Tab::Backup), Tab::Backup);
+    }
+
+    /// A message identical to the newest one is dropped; others are kept newest first, at most 50.
+    #[test]
+    fn repeated_newest_message_is_skipped() {
+        let mut m = Vec::new();
+        push_message(&mut m, "a".into());
+        push_message(&mut m, "a".into());
+        push_message(&mut m, "b".into());
+        push_message(&mut m, "a".into());
+        assert_eq!(m, ["a", "b", "a"]);
+        for i in 0..60 {
+            push_message(&mut m, i.to_string());
+        }
+        assert_eq!(m.len(), MAX_MESSAGES);
+        assert_eq!(m[0], "59");
     }
 }

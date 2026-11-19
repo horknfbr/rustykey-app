@@ -198,6 +198,15 @@ pub fn PreferencesPage() -> impl IntoView {
         });
     };
     let one = move |label: &'static str, cmd: Command| run(label, vec![(label, cmd)]);
+    // Irreversible device settings: writes `cmd` only after the user confirms `message`.
+    let confirmed =
+        move |title: &'static str, message: &'static str, label: &'static str, cmd: Command| {
+            spawn_local(async move {
+                if app.confirm(title, message, title, true).await {
+                    one(label, cmd);
+                }
+            });
+        };
     let input_mode_writes = move || {
         let mut w = Vec::new();
         if let Some(v) = derived.get() {
@@ -343,7 +352,12 @@ pub fn PreferencesPage() -> impl IntoView {
                         }
                         warning="WARNING - Once set to \"Full Wipe\" this cannot be changed."
                     >
-                        <Button kind=ButtonKind::Danger disabled=busy on:click=move |_| one("Wipe mode", set(FieldId::WipeMode, WIPE_MODE_FULL))>
+                        <Button kind=ButtonKind::Danger disabled=busy on:click=move |_| confirmed(
+                            "Set Full Wipe Mode",
+                            "After 10 incorrect PINs, OnlyKey will wipe all data and its firmware, and the firmware must be reloaded. Once set, Full Wipe Mode cannot be changed back. This cannot be undone.",
+                            "Wipe mode",
+                            set(FieldId::WipeMode, WIPE_MODE_FULL),
+                        )>
                             "Set Full Wipe Mode"
                         </Button>
                     </PrefRow>
@@ -402,7 +416,12 @@ pub fn PreferencesPage() -> impl IntoView {
                         description=|| view! { <u>"Locked"</u> " - " <em>"Backup key may not be changed on device"</em> }
                         warning="WARNING - Once set to \"Locked\" this cannot be changed."
                     >
-                        <Button kind=ButtonKind::Danger disabled=busy on:click=move |_| one("Backup key mode", set(FieldId::BackupKeyMode, 1))>
+                        <Button kind=ButtonKind::Danger disabled=busy on:click=move |_| confirmed(
+                            "Lock Backup Key",
+                            "Once locked, the backup key cannot be changed on the device, and if no backup key is set, backups are disabled. This cannot be undone without a factory default.",
+                            "Backup key mode",
+                            set(FieldId::BackupKeyMode, 1),
+                        )>
                             "Lock Backup Key"
                         </Button>
                     </PrefRow>

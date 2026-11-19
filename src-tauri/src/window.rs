@@ -16,6 +16,13 @@ pub fn show(app: &AppHandle) {
     }
 }
 
+/// `show_window`: shows and focuses the main window (the UI's update prompts call it). A sync
+/// command, so it runs on the main thread like every other window change.
+#[tauri::command]
+pub fn show_window(app: AppHandle) {
+    show(&app);
+}
+
 /// Hides the main window; on macOS the app becomes menu-bar only (no Dock icon).
 pub fn hide(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(MAIN) {

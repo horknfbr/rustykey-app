@@ -1,11 +1,10 @@
 //! Firmware page: auto-check preference, instructions by device state, and the firmware loader (`Firmware.tsx`).
 
 use super::tools::{ExtLink, device_type};
-use crate::backend::{Backend, Platform, backend};
+use crate::backend::{Backend, Platform, PrefsPatch, backend};
 use crate::components::HelpTip;
 use crate::components::firmware_loader::{FirmwareLoader, can_load_firmware};
 use crate::state::use_app;
-use crate::updates::fw_start_auto_check;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use onlykey_core::api::DeviceState;
@@ -76,11 +75,13 @@ pub fn FirmwarePage() -> impl IntoView {
                                 type="checkbox"
                                 prop:checked=move || app.prefs.with(|p| p.auto_update_fw)
                                 on:change=move |ev| {
-                                    let mut prefs = app.prefs.get_untracked();
-                                    prefs.auto_update_fw = event_target_checked(&ev);
+                                    // Turning it on starts the auto-check from the firmware update host.
+                                    let patch = PrefsPatch {
+                                        auto_update_fw: Some(event_target_checked(&ev)),
+                                        ..PrefsPatch::default()
+                                    };
                                     spawn_local(async move {
-                                        let _ = app.save_prefs(prefs).await;
-                                        fw_start_auto_check(app);
+                                        let _ = app.save_prefs(patch).await;
                                     });
                                 }
                             />

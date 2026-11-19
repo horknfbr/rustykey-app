@@ -199,10 +199,11 @@ fn refresh_with(app: &AppHandle, snap: &Snapshot) {
 
 /// Runs the action for menu item `id`.
 fn on_menu(app: &AppHandle, id: &str) {
-    let toggle = |flip: fn(&mut Prefs)| {
-        let mut p = prefs::current(app);
-        flip(&mut p);
-        if let Err(e) = prefs::update(app, p) {
+    // A tray toggle is a one-key prefs patch, so it takes the same path as the UI's `prefs_set`.
+    let toggle = |key: &str, get: fn(&Prefs) -> bool| {
+        let mut patch = serde_json::Map::new();
+        patch.insert(key.into(), (!get(&prefs::current(app))).into());
+        if let Err(e) = prefs::set(app, &patch) {
             eprintln!("tray: saving prefs failed: {e}");
         }
     };
@@ -216,12 +217,14 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         "sync_1password" => crate::onepassword::sync_from_tray(app),
         "check_updates" => {
+            // The update prompts live in the window, so bring it up first.
+            window::show(app);
             let _ = app.emit("host://check-updates", ());
         }
-        "autostart" => toggle(|p| p.autostart = !p.autostart),
-        "auto_update" => toggle(|p| p.auto_update = !p.auto_update),
-        "auto_update_fw" => toggle(|p| p.auto_update_fw = !p.auto_update_fw),
-        "close_to_tray" => toggle(|p| p.close_to_tray = !p.close_to_tray),
+        "autostart" => toggle(id, |p| p.autostart),
+        "auto_update" => toggle(id, |p| p.auto_update),
+        "auto_update_fw" => toggle(id, |p| p.auto_update_fw),
+        "close_to_tray" => toggle(id, |p| p.close_to_tray),
         "quit" => app.exit(0),
         _ => {}
     }
@@ -234,7 +237,8 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(idle.clone())
         .icon_as_template(cfg!(target_os = "macos"))
-        // macOS opens the menu on left click; Windows/Linux show the window instead.
+        // macOS opens the menu on left click; Windows/Linux show the window instead (Linux gets
+        // click events from the KSNI tray backend, see Cargo.toml).
         .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
         .on_tray_icon_event(|tray, event| {
@@ -340,6 +344,7 @@ mod tests {
     #[test]
     fn menu_model() {
         let prefs = Prefs {
+            autostart: true,
             auto_update: false,
             ..Prefs::default()
         };

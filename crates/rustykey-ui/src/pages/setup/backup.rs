@@ -229,9 +229,19 @@ pub(super) fn RestoreStep(
                     "If you do not have a backup file to restore then setup is complete, you may remove and reinsert your OnlyKey now."
                 </p>
             </fieldset>
-            <RestoreForm />
+            // Next restores; then a guided Classic setup goes on to firmware, anything else to the landing page
+            // (`Setup.tsx:300-307`).
+            <RestoreForm
+                on_done=move |()| {
+                    if wiz.duo.try_get_untracked().unwrap_or(true) {
+                        wiz.landing()
+                    } else {
+                        wiz.next_or_landing(11)
+                    }
+                }
+                on_cancel=move |()| wiz.cancel()
+            />
         </div>
-        <StepNav wiz=wiz />
     }
 }
 
@@ -248,7 +258,7 @@ pub(super) fn FirmwareStep(
                 "To load new firmware file to your OnlyKey, click [Choose File], select your firmware file, then click [Load Firmware to OnlyKey]."
             </p>
             <p>"The OnlyKey will restart automatically when firmware load is complete."</p>
-            <FirmwareLoader in_setup=true />
+            <FirmwareLoader in_setup=true on_done=move |()| wiz.landing() />
         </div>
         <StepNav wiz=wiz />
     }

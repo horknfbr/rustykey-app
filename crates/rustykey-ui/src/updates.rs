@@ -141,12 +141,19 @@ fn fw_gen() -> u64 {
 }
 
 /// True for host errors that should pop the dialog even on an automatic check (`autoDownloadErrorShowsModal`):
-/// integrity, location and parse failures. Plain network failures stay quiet.
+/// integrity, location, size and parse failures, and an HTTP error status from the firmware server
+/// ("Could not reach the firmware server (HTTP n)."). Plain network failures (no status) stay quiet.
 /// The host words its errors to match these keywords: keep in step with `src-tauri/src/updates.rs`.
 fn serious(message: &str) -> bool {
-    ["SHA-256", "refused", "parsed", "installer"]
-        .iter()
-        .any(|k| message.contains(k))
+    [
+        "SHA-256",
+        "refused",
+        "parsed",
+        "installer",
+        "firmware server (HTTP",
+    ]
+    .iter()
+    .any(|k| message.contains(k))
 }
 
 /// Download percentage, if the total is known.
@@ -731,12 +738,21 @@ fn follow_progress(app: AppState) {
     });
 }
 
+/// Shows and focuses the window each time `open` turns true (`AppUpdateHost.tsx:59-66`, `FirmwareUpdateHost.tsx:87-93`).
+fn show_window_when(open: impl Fn() -> bool + 'static) {
+    Effect::new(move |was_open: Option<bool>| {
+        let now = open();
+        if now && was_open != Some(true) {
+            spawn_local(async { backend().show_window().await });
+        }
+        now
+    });
+}
+
 /// Firmware auto-check, unplug reset, resumed-stream progress and the firmware dialog. Mounted by [`UpdateHosts`].
+/// The auto-check reruns on every prefs change, so turning `auto_update_fw` on (UI or tray) checks right away.
 #[component]
-fn FirmwareUpdateHost(
-    /// Prefs have been read from the host (gates the first auto-check).
-    loaded: RwSignal<bool>,
-) -> impl IntoView {
+fn FirmwareUpdateHost() -> impl IntoView {
     let app = use_app();
     let s = fw();
     Effect::new(move |_| {
@@ -744,7 +760,7 @@ fn FirmwareUpdateHost(
         app.working.track();
         app.setup_blocks_firmware_prompt.track();
         app.prefs.track();
-        if loaded.get() {
+        if app.prefs_loaded.get() {
             untrack(|| fw_start_auto_check(app));
         }
     });
@@ -769,7 +785,8 @@ fn FirmwareUpdateHost(
                 message: "Loading firmware… 0%".into(),
                 progress: None,
             }));
-        } else if !bootloader && streaming.get() {
+        } else if streaming.get() && (!bootloader || app.working.with(Option::is_none)) {
+            // Left the bootloader, or a device error closed the dialog (`AppState::on_event`).
             streaming.set(false);
             app.working.set(None);
         }
@@ -787,6 +804,7 @@ fn FirmwareUpdateHost(
             || d.1;
         snap_connected && fw().prompt.get() && !deferred && fw().phase.get().presents()
     };
+    show_window_when(open);
     move || {
         open().then(|| {
             let on_cancel = Callback::new(move |()| fw_dismiss());
@@ -826,6 +844,7 @@ fn AppUpdateHost() -> impl IntoView {
         let s = app_updates();
         s.prompt.get() && !deferred && s.phase.get().presents()
     };
+    show_window_when(open);
     move || {
         open().then(|| {
             let on_cancel = Callback::new(move |()| app_dismiss());
@@ -845,22 +864,23 @@ fn AppUpdateHost() -> impl IntoView {
 #[component]
 pub fn UpdateHosts() -> impl IntoView {
     let app = use_app();
-    let loaded = RwSignal::new(false);
     follow_progress(app);
     // Tray "Check for Updates…": forced app + firmware checks, shown like "Check now".
     backend().on_check_updates(move || {
         app_check_now();
         fw_check_now(app);
     });
-    spawn_local(async move {
-        // Read prefs ourselves so a stored "off" is honoured before the first check.
-        let prefs = backend().prefs_get().await;
-        loaded.set(true);
-        app_start_auto_check(prefs.auto_update);
+    // Once the host's prefs are in, and again whenever `auto_update` turns on (UI, tray or focus re-read);
+    // the session `checked` flag keeps it to one automatic check (`useAppUpdateStore.ts:126-140`).
+    Effect::new(move |_| {
+        if app.prefs_loaded.get() {
+            let on = app.prefs.with(|p| p.auto_update);
+            untrack(|| app_start_auto_check(on));
+        }
     });
     view! {
         <AppUpdateHost />
-        <FirmwareUpdateHost loaded=loaded />
+        <FirmwareUpdateHost />
     }
 }
 
@@ -879,7 +899,7 @@ mod tests {
         assert_eq!(percent(5, Some(0)), None);
     }
 
-    /// Integrity and location errors pop the dialog on auto-checks; network errors do not.
+    /// Integrity, location, size and HTTP-status errors pop the dialog on auto-checks; plain network errors do not.
     #[test]
     fn serious_errors() {
         assert!(serious(
@@ -888,6 +908,10 @@ mod tests {
         assert!(serious(
             "Firmware download refused: the location is not an allowed HTTPS GitHub path."
         ));
+        assert!(serious(
+            "Firmware download refused: the file is larger than 4 MB."
+        ));
+        assert!(serious("Could not reach the firmware server (HTTP 404)."));
         assert!(!serious("Could not reach the firmware server."));
     }
 }

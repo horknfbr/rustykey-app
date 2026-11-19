@@ -4,7 +4,7 @@
 //! Ctrl+Shift+D cycles Disconnected → Locked → Unlocked → Config mode (locked) → Config mode (unlocked) → Bootloader → Uninitialized;
 //! Ctrl+Shift+K toggles Classic / DUO.
 
-use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs};
+use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs, PrefsPatch};
 use leptos::ev::keydown;
 use leptos::prelude::window_event_listener;
 use onlykey_core::api::{Command, DeviceError, DeviceKind, DeviceState, Event, Reply, Snapshot};
@@ -34,6 +34,10 @@ struct Fake {
     listeners: Vec<Rc<dyn Fn(Event)>>,
     /// In-memory prefs.
     prefs: Prefs,
+    /// `host://prefs-changed` listeners.
+    prefs_listeners: Vec<Rc<dyn Fn(Prefs)>>,
+    /// Stored `op --account` choice.
+    op_account: Option<String>,
 }
 
 thread_local! {
@@ -42,6 +46,8 @@ thread_local! {
         snap: snapshot_for(DeviceState::Unlocked, false, DeviceKind::Duo, 1),
         listeners: Vec::new(),
         prefs: Prefs::default(),
+        prefs_listeners: Vec::new(),
+        op_account: None,
     });
 }
 
@@ -204,10 +210,21 @@ impl Backend for FakeBackend {
         FAKE.with_borrow(|f| f.prefs.clone())
     }
 
-    /// In-memory prefs.
-    async fn prefs_set(&self, prefs: Prefs) -> Result<(), String> {
-        FAKE.with_borrow_mut(|f| f.prefs = prefs);
-        Ok(())
+    /// Merges into the in-memory prefs and tells the prefs listeners, like the host.
+    async fn prefs_set(&self, patch: PrefsPatch) -> Result<Prefs, String> {
+        let (prefs, listeners) = FAKE.with_borrow_mut(|f| {
+            f.prefs = f.prefs.clone().merged(&patch);
+            (f.prefs.clone(), f.prefs_listeners.clone())
+        });
+        for l in listeners {
+            l(prefs.clone());
+        }
+        Ok(prefs)
+    }
+
+    /// Adds a prefs listener.
+    fn on_prefs_changed(&self, f: impl Fn(Prefs) + 'static) {
+        FAKE.with_borrow_mut(|s| s.prefs_listeners.push(Rc::new(f)));
     }
 
     /// No file picker in the fake.
@@ -227,10 +244,10 @@ impl Backend for FakeBackend {
         }
     }
 
-    /// Always offers app 0.2.0 after 300 ms.
-    async fn app_update_check(&self, _force: bool) -> Result<Option<AppUpdate>, String> {
+    /// Offers app 0.2.0 after 300 ms, only on "Check now" (automatic checks find nothing, so no dialog at startup).
+    async fn app_update_check(&self, force: bool) -> Result<Option<AppUpdate>, String> {
         sleep(300).await;
-        Ok(Some(AppUpdate {
+        Ok(force.then(|| AppUpdate {
             version: "0.2.0".into(),
             notes: "Fake release.".into(),
             can_install: true,
@@ -251,10 +268,10 @@ impl Backend for FakeBackend {
         Err("Fake backend: install skipped (a real host restarts the app here).".into())
     }
 
-    /// Always offers firmware v3.0.5 after 300 ms.
-    async fn fw_check(&self, _force: bool) -> Result<Option<FirmwareRelease>, String> {
+    /// Offers firmware v3.0.5 after 300 ms, only on "Check now" (no dialog at startup).
+    async fn fw_check(&self, force: bool) -> Result<Option<FirmwareRelease>, String> {
         sleep(300).await;
-        Ok(Some(FirmwareRelease {
+        Ok(force.then(|| FirmwareRelease {
             version: "v3.0.5".into(),
         }))
     }
@@ -265,19 +282,29 @@ impl Backend for FakeBackend {
         Ok(vec![vec![0u8; 32]; 4])
     }
 
-    /// `op` 2.42.0 with one account.
+    /// `op` 2.42.0 with two accounts (so the account picker shows) and the stored choice.
     async fn op_status(&self) -> Result<OpStatus, String> {
+        let account = |url: &str, email: &str, uuid: &str| OpAccount {
+            url: url.into(),
+            email: email.into(),
+            account_uuid: uuid.into(),
+        };
         Ok(OpStatus {
             available: true,
             version: Some("2.42.0".into()),
-            accounts: vec![OpAccount {
-                url: "my.1password.com".into(),
-                email: "someone@example.com".into(),
-                account_uuid: "FAKEACCOUNT".into(),
-            }],
-            account: None,
+            accounts: vec![
+                account("my.1password.com", "someone@example.com", "FAKEACCOUNT"),
+                account("team.1password.com", "someone@work.example", "FAKEWORK"),
+            ],
+            account: FAKE.with_borrow(|f| f.op_account.clone()),
             error: None,
         })
+    }
+
+    /// Stores the account choice in memory.
+    async fn op_set_account(&self, account: Option<String>) -> Result<(), String> {
+        FAKE.with_borrow_mut(|f| f.op_account = account);
+        Ok(())
     }
 
     /// Slot 1 synced, 3 out of date, 5 tagged twice, 7 never synced.

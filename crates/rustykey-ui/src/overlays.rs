@@ -1,7 +1,7 @@
-//! Global overlays: disconnected screen, LockScreen (+ 1500 ms status poll), udev dialog, DUO PIN error toast.
+//! Global overlays: disconnected screen, LockScreen (+ 1500 ms status poll), udev dialog, device error and DUO PIN error toasts.
 
 use crate::backend::{Backend, backend};
-use crate::components::{Button, Modal, Notice, NoticeKind};
+use crate::components::{Button, ButtonKind, Modal, Notice, NoticeKind};
 use crate::state::{Tab, is_locked, use_app};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -208,7 +208,7 @@ pub fn LockScreen() -> impl IntoView {
     }
 }
 
-/// udev / permission dialog (Linux) and the DUO PIN error toast (`DeviceDialogs.tsx`).
+/// Device error toast (dismissible), udev / permission dialog (Linux) and the DUO PIN error toast (`DeviceDialogs.tsx`).
 #[component]
 pub fn DeviceDialogs() -> impl IntoView {
     let app = use_app();
@@ -226,6 +226,22 @@ pub fn DeviceDialogs() -> impl IntoView {
         })
     };
     view! {
+        {move || {
+            app.error
+                .get()
+                .map(|e| {
+                    view! {
+                        <div class="toast">
+                            <Notice kind=NoticeKind::Error>
+                                {e} " "
+                                <Button kind=ButtonKind::Secondary on:click=move |_| app.error.set(None)>
+                                    "Dismiss"
+                                </Button>
+                            </Notice>
+                        </div>
+                    }
+                })
+        }}
         {move || {
             udev_error()
                 .map(|e| {

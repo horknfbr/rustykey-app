@@ -176,6 +176,7 @@ h2, h3 { margin: 0 0 calc(var(--space) * 2); }
   padding: var(--space) calc(var(--space) * 2);
 }
 .pin-input::placeholder { letter-spacing: normal; font-size: 14px; }
+.lock-form .pin-input, .lock-form .btn { width: 100%; box-sizing: border-box; }
 .pill {
   padding: var(--space) calc(var(--space) * 2);
   border-radius: 999px;

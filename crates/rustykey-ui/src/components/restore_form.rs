@@ -48,8 +48,16 @@ pub fn FilePick(
 }
 
 /// Restore-from-backup form: choose a `.txt`/`.okb` backup, "Restore to OnlyKey", then the reinsert notice.
+/// In Setup (`on_cancel` given) the button reads "Next" and sits in the step bar with Cancel (`Setup.tsx` `RestoreStep`).
 #[component]
-pub fn RestoreForm() -> impl IntoView {
+pub fn RestoreForm(
+    /// Called after a successful restore (Setup advances to the next step).
+    #[prop(into, optional)]
+    on_done: Option<Callback<()>>,
+    /// Setup step bar mode: Cancel button that calls this.
+    #[prop(into, optional)]
+    on_cancel: Option<Callback<()>>,
+) -> impl IntoView {
     let app = use_app();
     let file = RwSignal::new(None::<(String, String)>);
     let restoring = RwSignal::new(false);
@@ -76,25 +84,49 @@ pub fn RestoreForm() -> impl IntoView {
             };
             drop(text);
             match result {
-                Ok(_) => success.set(Some(
-                    "Backup loaded. Remove and reinsert your OnlyKey to finish the restore.".into(),
-                )),
-                Err(e) => error.set(Some(e)),
+                Ok(_) => {
+                    success.try_set(Some(
+                        "Backup loaded. Remove and reinsert your OnlyKey to finish the restore."
+                            .into(),
+                    ));
+                    // Skip it if the session reset meanwhile: the caller (and its callback) is gone.
+                    if let Some(done) = on_done.filter(|_| restoring.try_get_untracked().is_some())
+                    {
+                        done.run(());
+                    }
+                }
+                Err(e) => {
+                    error.try_set(Some(e));
+                }
             }
-            restoring.set(false);
+            restoring.try_set(false);
         });
     };
+    let disabled = Signal::derive(move || restoring.get() || file.with(Option::is_none));
     view! {
         <div class="stack">
             <FilePick accept=&["txt", "okb"] file=file />
-            <div>
-                <Button
-                    disabled=Signal::derive(move || restoring.get() || file.with(Option::is_none))
-                    on:click=restore
-                >
-                    {move || if restoring.get() { "Restoring..." } else { "Restore to OnlyKey" }}
-                </Button>
-            </div>
+            {match on_cancel {
+                None => view! {
+                    <div>
+                        <Button disabled=disabled on:click=restore>
+                            {move || if restoring.get() { "Restoring..." } else { "Restore to OnlyKey" }}
+                        </Button>
+                    </div>
+                }
+                    .into_any(),
+                Some(cancel) => view! {
+                    <div class="setup-nav">
+                        <Button disabled=disabled on:click=restore>
+                            {move || if restoring.get() { "Please wait…" } else { "Next" }}
+                        </Button>
+                        <Button kind=ButtonKind::Secondary on:click=move |_| cancel.run(())>
+                            "Cancel"
+                        </Button>
+                    </div>
+                }
+                    .into_any(),
+            }}
             {move || error.get().map(|e| view! { <p class="critical-text">{e}</p> })}
             {move || success.get().map(|s| view! { <p class="status-success">{s}</p> })}
         </div>

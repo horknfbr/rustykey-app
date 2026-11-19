@@ -5,6 +5,10 @@ target = "web/index.html"
 dist = "dist-web"
 # Relative asset URLs, so the site works under a sub-path (GitHub Pages).
 public_url = "./"
+# The CSP in web/index.html forbids inline scripts, so web/init.js loads the wasm instead of Trunk's
+# inline loader; fixed file names let init.js find the bindgen output.
+inject_scripts = false
+filehash = false
 
 [serve]
 port = 1421

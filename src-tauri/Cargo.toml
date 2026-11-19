@@ -28,12 +28,19 @@ zeroize = "1"
 # non-exclusively so other apps keep the key. Windows: the native backend.
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "2.6", default-features = false, features = ["linux-static-hidraw"] }
+# Tauri's tray uses tray-icon's AppIndicator backend, which never reports clicks. Turning on `ksni`
+# switches tray-icon to its StatusNotifier backend (it wins when both are on; build prints a
+# warning) so a left click can show the window.
+tray-icon = { version = "0.25", default-features = false, features = ["ksni"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 hidapi = { version = "2.6", default-features = false, features = ["macos-shared-device"] }
 [target.'cfg(windows)'.dependencies]
 hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
 
 [dev-dependencies]
+# Canned responses for the firmware download size-cap test (`reqwest::Body::wrap_stream`).
+futures-util = { version = "0.3", default-features = false }
+http = "1"
 onlykey-core = { path = "../crates/onlykey-core", features = ["mock"] }
 sha2 = "0.10"
 tauri = { version = "2.12", features = ["test"] }

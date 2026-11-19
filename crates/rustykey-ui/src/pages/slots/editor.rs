@@ -5,7 +5,7 @@
 use super::generator::PasswordGenerator;
 use super::onepassword::{OpPicker, op_supported};
 use super::{refresh_labels, slot_label};
-use crate::backend::{Backend, Prefs, backend};
+use crate::backend::{Backend, PrefsPatch, backend};
 use crate::components::{Button, ButtonKind, HelpTip, Modal, Notice, NoticeKind};
 use crate::state::use_app;
 use leptos::prelude::*;
@@ -170,6 +170,24 @@ impl Form {
     }
 }
 
+/// True when Enter on the event's target should submit the editor like a form (`SlotEditor.tsx:186`):
+/// a text-like `<input>`, not a checkbox, radio or button (those keep their own Enter behaviour).
+fn enter_submits(e: &leptos::ev::KeyboardEvent) -> bool {
+    use wasm_bindgen::JsCast;
+    let Some(el) = e
+        .target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+    else {
+        return false;
+    };
+    let ty = el.get_attribute("type").unwrap_or_default().to_lowercase();
+    el.tag_name().eq_ignore_ascii_case("input")
+        && !matches!(
+            ty.as_str(),
+            "checkbox" | "radio" | "button" | "submit" | "reset" | "file"
+        )
+}
+
 /// Editor tab: `basic`, `mfa` or `advanced` (prefs `slot_editor_mode`).
 fn tab_label(mode: &str, duo_no_pin: bool) -> &'static str {
     match mode {
@@ -215,12 +233,12 @@ pub fn SlotEditor(
 
     let select_mode = move |m: &'static str| {
         mode.set(m);
-        let prefs = Prefs {
-            slot_editor_mode: m.into(),
-            ..app.prefs.get_untracked()
+        let patch = PrefsPatch {
+            slot_editor_mode: Some(m.into()),
+            ..PrefsPatch::default()
         };
         spawn_local(async move {
-            let _ = app.save_prefs(prefs).await;
+            let _ = app.save_prefs(patch).await;
         });
     };
 
@@ -249,7 +267,10 @@ pub fn SlotEditor(
         }
     };
 
-    let save = move |_| {
+    let save = move || {
+        if saving.get_untracked() {
+            return;
+        }
         error.set(None);
         let cmds = match build_slot_commands(slot, &form.to_slot_form(), duo_no_pin) {
             Ok(c) => c,
@@ -312,7 +333,16 @@ pub fn SlotEditor(
     let advanced = move || mode.get() == "advanced";
     view! {
         <Modal title=format!("OnlyKey Slot {slot} Configuration") on_close=close>
-            <div class="slot-editor" class:slot-editor--advanced=advanced>
+            <div
+                class="slot-editor"
+                class:slot-editor--advanced=advanced
+                on:keydown=move |e: leptos::ev::KeyboardEvent| {
+                    if e.key() == "Enter" && enter_submits(&e) {
+                        e.prevent_default();
+                        save();
+                    }
+                }
+            >
                 <button
                     type="button"
                     class="slot-editor-close"
@@ -431,7 +461,7 @@ pub fn SlotEditor(
                         <Button kind=ButtonKind::Secondary on:click=move |_| on_close.run(())>
                             "Cancel"
                         </Button>
-                        <Button disabled=saving on:click=save>
+                        <Button disabled=saving on:click=move |_| save()>
                             {move || if saving.get() { "Saving..." } else { "Set Slot" }}
                         </Button>
                     </div>

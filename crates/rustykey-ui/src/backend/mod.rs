@@ -71,6 +71,43 @@ impl Default for Prefs {
     }
 }
 
+/// A prefs change: only the `Some` keys are sent, and the host merges them into the stored prefs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct PrefsPatch {
+    /// Start at login.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub autostart: Option<bool>,
+    /// Check for app updates automatically.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_update: Option<bool>,
+    /// Check for firmware updates automatically.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_update_fw: Option<bool>,
+    /// Hide to tray when the window closes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub close_to_tray: Option<bool>,
+    /// `"dark"` or `"light"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
+    /// Last slot editor tab.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot_editor_mode: Option<String>,
+}
+
+impl Prefs {
+    /// Returns these prefs with the keys set in `patch` replaced.
+    pub fn merged(mut self, patch: &PrefsPatch) -> Self {
+        let p = patch.clone();
+        self.autostart = p.autostart.unwrap_or(self.autostart);
+        self.auto_update = p.auto_update.unwrap_or(self.auto_update);
+        self.auto_update_fw = p.auto_update_fw.unwrap_or(self.auto_update_fw);
+        self.close_to_tray = p.close_to_tray.unwrap_or(self.close_to_tray);
+        self.theme = p.theme.unwrap_or(self.theme);
+        self.slot_editor_mode = p.slot_editor_mode.unwrap_or(self.slot_editor_mode);
+        self
+    }
+}
+
 /// What the 1Password methods answer on hosts without the `op` CLI (the web build).
 pub const OP_DESKTOP_ONLY: &str = "1Password sync is only available in the desktop app.";
 
@@ -111,8 +148,12 @@ pub trait Backend {
     fn on_check_updates(&self, _f: impl Fn() + 'static) {}
     /// Reads prefs (defaults if the host has none).
     async fn prefs_get(&self) -> Prefs;
-    /// Stores prefs.
-    async fn prefs_set(&self, prefs: Prefs) -> Result<(), String>;
+    /// Merges `patch` (only its `Some` keys) into the stored prefs; returns the full prefs after the merge.
+    async fn prefs_set(&self, patch: PrefsPatch) -> Result<Prefs, String>;
+    /// Registers `f` for `host://prefs-changed` (full prefs after any change, UI or tray); no-op without a host.
+    fn on_prefs_changed(&self, _f: impl Fn(Prefs) + 'static) {}
+    /// Shows and focuses the app window (update prompts); no-op without a window to raise.
+    async fn show_window(&self) {}
     /// Asks the user for a text file; `accept` lists extensions like `"txt"`. Returns (name, contents).
     async fn pick_text_file(&self, accept: &[&str]) -> Option<(String, String)>;
     /// Asks the user where to save `text`; true when saved.
@@ -145,6 +186,10 @@ pub trait Backend {
     async fn op_sync(&self, _slots: Option<Vec<u8>>) -> Result<Vec<SlotSyncResult>, String> {
         Err(OP_DESKTOP_ONLY.into())
     }
+    /// Stores the `op --account` choice (`None` = the CLI's default account).
+    async fn op_set_account(&self, _account: Option<String>) -> Result<(), String> {
+        Err(OP_DESKTOP_ONLY.into())
+    }
     /// Login items for the editor's picker (titles only).
     async fn op_logins(&self) -> Result<Vec<OpLogin>, String> {
         Err(OP_DESKTOP_ONLY.into())
@@ -152,5 +197,30 @@ pub trait Backend {
     /// One item mapped to slot editor values (secrets; call only on the user's explicit pick).
     async fn op_item_form(&self, _id: &str) -> Result<ItemFill, String> {
         Err(OP_DESKTOP_ONLY.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Prefs patch merge.
+
+    use super::*;
+
+    /// Only the patched keys change.
+    #[test]
+    fn patch_merges_and_serializes_only_set_keys() {
+        let patch = PrefsPatch {
+            theme: Some("light".into()),
+            ..PrefsPatch::default()
+        };
+        let merged = Prefs::default().merged(&patch);
+        assert_eq!(merged.theme, "light");
+        assert_eq!(
+            Prefs {
+                theme: "dark".into(),
+                ..merged
+            },
+            Prefs::default()
+        );
     }
 }

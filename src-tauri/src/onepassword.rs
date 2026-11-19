@@ -116,16 +116,34 @@ fn first_line(stderr: &[u8], code: Option<i32>) -> String {
     }
 }
 
-/// Runs `op` with `args` (no shell, inherited env, stdin closed), killing it after [`TIMEOUT`].
-/// Returns stdout on success, else the filtered first stderr line.
-fn run(op: &Path, account: Option<&str>, args: &[String]) -> Result<Zeroizing<Vec<u8>>, String> {
+/// Environment variables that switch `op` away from the desktop-app integration (service account
+/// or Connect server); removed so RustyKey only ever acts as the signed-in user.
+const FOREIGN_AUTH_ENV: [&str; 3] = [
+    "OP_SERVICE_ACCOUNT_TOKEN",
+    "OP_CONNECT_HOST",
+    "OP_CONNECT_TOKEN",
+];
+
+/// The `op` invocation: `--no-color`, optional `--account`, `args`; environment inherited minus
+/// [`FOREIGN_AUTH_ENV`].
+fn command(op: &Path, account: Option<&str>, args: &[String]) -> Command {
     let mut cmd = Command::new(op);
+    for var in FOREIGN_AUTH_ENV {
+        cmd.env_remove(var);
+    }
     cmd.arg("--no-color");
     if let Some(account) = account {
         cmd.arg(format!("--account={account}"));
     }
-    cmd.args(args)
-        .stdin(Stdio::null())
+    cmd.args(args);
+    cmd
+}
+
+/// Runs `op` with `args` (no shell, inherited env minus [`FOREIGN_AUTH_ENV`], stdin closed),
+/// killing it after [`TIMEOUT`]. Returns stdout on success, else the filtered first stderr line.
+fn run(op: &Path, account: Option<&str>, args: &[String]) -> Result<Zeroizing<Vec<u8>>, String> {
+    let mut cmd = command(op, account, args);
+    cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(windows)]
@@ -351,8 +369,13 @@ pub async fn op_item_form(app: AppHandle, id: String) -> Result<ItemFill, String
     fill_for_item(&item).map_err(|e| e.to_string())
 }
 
-/// Writes one linked item to `slot`; stops at the first device error. Returns the new link.
-async fn sync_one(app: &AppHandle, slot: u8, item: &ItemSummary) -> Result<Link, String> {
+/// Writes one linked item to `slot`; stops at the first device error. Returns the new link and
+/// the plan's note (fields left out), if any.
+async fn sync_one(
+    app: &AppHandle,
+    slot: u8,
+    item: &ItemSummary,
+) -> Result<(Link, Option<&'static str>), String> {
     let svc = app.state::<DeviceService>();
     let snap = svc.snapshot();
     if snap.state != DeviceState::Unlocked {
@@ -366,7 +389,7 @@ async fn sync_one(app: &AppHandle, slot: u8, item: &ItemSummary) -> Result<Link,
             .map(String::as_str),
     )
     .await?;
-    let (planned, cmds) =
+    let (planned, cmds, note) =
         plan_for_item(&detail, snap.kind, snap.pin_set).map_err(|e| e.to_string())?;
     if planned != slot {
         return Err("The item's slot tag changed during sync; sync again.".into());
@@ -380,7 +403,7 @@ async fn sync_one(app: &AppHandle, slot: u8, item: &ItemSummary) -> Result<Link,
     for cmd in cmds {
         svc.send(cmd).await.map_err(|e| e.to_string())?;
     }
-    Ok(link)
+    Ok((link, note))
 }
 
 /// Syncs all linked slots (or just `slots`) from 1Password; never wipes a slot. Needs the device
@@ -403,16 +426,19 @@ pub async fn sync(app: &AppHandle, slots: Option<Vec<u8>>) -> Result<Vec<SlotSyn
         let outcome = match target {
             Ok(item) => sync_one(app, slot, item)
                 .await
-                .map(|link| (link, item.title.clone())),
+                .map(|(link, note)| (link, item.title.clone(), note)),
             Err(e) => Err(e.to_string()),
         };
         results.push(match outcome {
-            Ok((link, title)) => {
+            Ok((link, title, note)) => {
                 links.insert(slot, link);
                 SlotSyncResult {
                     slot,
                     ok: true,
-                    message: format!("Wrote \"{title}\"."),
+                    message: match note {
+                        Some(note) => format!("Wrote \"{title}\" ({note})."),
+                        None => format!("Wrote \"{title}\"."),
+                    },
                 }
             }
             Err(message) => SlotSyncResult {
@@ -517,6 +543,23 @@ mod tests {
         );
         let fail = run(Path::new("/usr/bin/false"), None, &[]).unwrap_err();
         assert_eq!(fail, "The 1Password CLI failed (exit code 1).");
+    }
+
+    /// The service-account and Connect variables are removed from the child's environment.
+    #[test]
+    fn foreign_auth_env_removed() {
+        let cmd = command(Path::new("op"), Some("me"), &["--version".into()]);
+        let removed: Vec<_> = cmd
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(removed.len(), FOREIGN_AUTH_ENV.len());
+        for var in FOREIGN_AUTH_ENV {
+            assert!(removed.iter().any(|r| r == var), "{var}");
+        }
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy()).collect();
+        assert_eq!(args, ["--no-color", "--account=me", "--version"]);
     }
 
     /// Live check of `op_status`'s calls on a machine with `op`; never runs item commands.

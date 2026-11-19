@@ -60,7 +60,10 @@ pub fn BackupPage() -> impl IntoView {
         }
         error.set(None);
         spawn_local(async move {
-            backend().save_text_file(&backup_file_name(), &block).await;
+            if backend().save_text_file(&backup_file_name(), &block).await {
+                data.try_set(String::new());
+                verified.try_set(None);
+            }
         });
     };
 

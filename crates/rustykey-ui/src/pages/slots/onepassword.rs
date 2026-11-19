@@ -2,18 +2,14 @@
 //! slot editor's item picker. Secrets from `op_item_form` go straight into the editor's signals.
 
 use crate::backend::{Backend, Platform, backend};
-use crate::components::{Button, Modal, Notice, NoticeKind};
+use crate::components::{Button, ButtonKind, Modal, Notice, NoticeKind};
 use crate::state::use_app;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use onlykey_core::api::DeviceState;
 use onlykey_core::onepassword::{
-    ItemFill, LinkStatus, LinkedSlot, OpLogin, OpStatus, SlotSyncResult,
+    ItemFill, LinkStatus, LinkedSlot, OpAccount, OpLogin, OpStatus, SlotSyncResult,
 };
-
-/// Tagged items from `op_list`, shared with the slot pills through context.
-#[derive(Clone, Copy)]
-pub struct OpLinks(pub RwSignal<Vec<LinkedSlot>>);
 
 /// True when this build runs in the desktop app (1Password controls show only there).
 pub fn op_supported() -> bool {
@@ -39,17 +35,18 @@ fn badge(links: &[LinkedSlot], slot: u8) -> Option<(&'static str, &'static str)>
     })
 }
 
-/// Badge next to a slot pill: linked / out of date / duplicate. Renders nothing without links.
+/// Badge next to a slot pill: linked / out of date / duplicate, from the session's cached link check.
+/// Renders nothing until links were checked or for an untagged slot.
 #[component]
 pub fn LinkBadge(
     /// Slot number 1–24 (`slot` is reserved by the view macro).
     index: u8,
 ) -> impl IntoView {
     let slot = index;
-    let links = use_context::<OpLinks>();
+    let app = use_app();
     move || {
-        let links = links?;
-        links.0.with(|l| {
+        app.op_links.with(|l| {
+            let l = l.as_deref()?;
             let titles: Vec<String> = l
                 .iter()
                 .filter(|x| x.slot == slot)
@@ -69,48 +66,53 @@ pub fn LinkBadge(
     }
 }
 
-/// "Sync from 1Password" with its disabled reason, results list and help text.
-/// Loads `op_status`, then `op_list` into `links`.
-#[component]
-pub fn SyncPanel(
-    /// Where the tagged items go (read by [`LinkBadge`]).
-    links: RwSignal<Vec<LinkedSlot>>,
-) -> impl IntoView {
-    let app = use_app();
-    let status = RwSignal::new(None::<OpStatus>);
-    let list_error = RwSignal::new(None::<String>);
-    let results = RwSignal::new(None::<Result<Vec<SlotSyncResult>, String>>);
-    let syncing = RwSignal::new(false);
+/// `op` account label for the picker: `email (sign-in address)`.
+fn account_label(a: &OpAccount) -> String {
+    format!("{} ({})", a.email, a.url)
+}
 
-    let load_links = move || {
+/// True when the stored `--account` choice names `a` (by ID, sign-in address or email).
+fn is_chosen(stored: Option<&str>, a: &OpAccount) -> bool {
+    stored.is_some_and(|s| s == a.account_uuid || s == a.url || s == a.email)
+}
+
+/// "Sync from 1Password" and "Check 1Password links" with their disabled reason, the account picker
+/// (more than one `op` account), results list and help text. Reads `op_status` once per app run; runs
+/// `op_list` only on a click or after a sync, caching it in `AppState::op_links` for the session.
+#[component]
+pub fn SyncPanel() -> impl IntoView {
+    let app = use_app();
+    let list_error = RwSignal::new(None::<String>);
+    let account_error = RwSignal::new(None::<String>);
+    let results = RwSignal::new(None::<Result<Vec<SlotSyncResult>, String>>);
+    let busy = RwSignal::new(false);
+
+    // Reads `op_status` into the app cache (no Touch ID prompt).
+    let load_status = move || {
         spawn_local(async move {
-            match backend().op_list().await {
-                Ok(l) => {
-                    list_error.set(None);
-                    links.set(l);
-                }
-                Err(e) => list_error.set(Some(e)),
-            }
+            let s = backend().op_status().await.unwrap_or_else(|e| OpStatus {
+                error: Some(e),
+                ..OpStatus::default()
+            });
+            app.op_status.set(Some(s));
         });
     };
-    spawn_local(async move {
-        let s = backend().op_status().await.unwrap_or_else(|e| OpStatus {
-            error: Some(e),
-            ..OpStatus::default()
-        });
-        let available = s.available;
-        status.set(Some(s));
-        if available
-            && app
-                .snapshot
-                .with_untracked(|s| s.state == DeviceState::Unlocked)
-        {
-            load_links();
+    if app.op_status.with_untracked(Option::is_none) {
+        load_status();
+    }
+    // Runs `op_list` and caches the link status for the badges.
+    let load_links = move || async move {
+        match backend().op_list().await {
+            Ok(l) => {
+                list_error.set(None);
+                app.op_links.set(Some(l));
+            }
+            Err(e) => list_error.set(Some(e)),
         }
-    });
+    };
 
     let reason = move || -> Option<String> {
-        match status.get() {
+        match app.op_status.get() {
             None => Some("Looking for the 1Password CLI…".into()),
             Some(s) if !s.available => s
                 .error
@@ -121,27 +123,87 @@ pub fn SyncPanel(
             Some(_) => None,
         }
     };
+    let disabled = Signal::derive(move || busy.get() || reason().is_some());
     let sync = move |_| {
         results.set(None);
-        syncing.set(true);
+        busy.set(true);
         spawn_local(async move {
             let res = app
                 .working("Syncing from 1Password…", backend().op_sync(None))
                 .await;
-            syncing.set(false);
-            results.set(Some(res));
-            load_links();
+            results.try_set(Some(res));
+            load_links().await;
+            busy.try_set(false);
         });
+    };
+    let check = move |_| {
+        busy.set(true);
+        spawn_local(async move {
+            load_links().await;
+            busy.try_set(false);
+        });
+    };
+    // Stores the picked account; the cached links belonged to the old one.
+    let choose_account = move |ev: leptos::ev::Event| {
+        let value = event_target_value(&ev);
+        let account = (!value.is_empty()).then_some(value);
+        account_error.set(None);
+        spawn_local(async move {
+            match backend().op_set_account(account).await {
+                Ok(()) => {
+                    app.op_links.set(None);
+                    load_status();
+                }
+                Err(e) => {
+                    account_error.try_set(Some(e));
+                }
+            }
+        });
+    };
+    let accounts = move || {
+        app.op_status.with(|s| {
+            s.as_ref()
+                .filter(|s| s.accounts.len() > 1)
+                .map(|s| (s.accounts.clone(), s.account.clone()))
+        })
     };
 
     view! {
         <section class="op-sync">
+            {move || {
+                accounts()
+                    .map(|(list, stored)| {
+                        let none_chosen = !list.iter().any(|a| is_chosen(stored.as_deref(), a));
+                        view! {
+                            <label class="form-row">
+                                <span class="form-label">"1Password account"</span>
+                                <select disabled=move || busy.get() on:change=choose_account>
+                                    <option value="" selected=none_chosen>
+                                        "Default account"
+                                    </option>
+                                    {list
+                                        .into_iter()
+                                        .map(|a| {
+                                            let selected = is_chosen(stored.as_deref(), &a);
+                                            view! {
+                                                <option value=a.account_uuid.clone() selected=selected>
+                                                    {account_label(&a)}
+                                                </option>
+                                            }
+                                        })
+                                        .collect_view()}
+                                </select>
+                            </label>
+                        }
+                    })
+            }}
+            {move || account_error.get().map(|e| view! { <Notice kind=NoticeKind::Error>{e}</Notice> })}
             <div class="op-sync-row">
-                <Button
-                    disabled=Signal::derive(move || syncing.get() || reason().is_some())
-                    on:click=sync
-                >
+                <Button disabled=disabled on:click=sync>
                     "Sync from 1Password"
+                </Button>
+                <Button kind=ButtonKind::Secondary disabled=disabled on:click=check>
+                    "Check 1Password links"
                 </Button>
                 {move || reason().map(|r| view! { <span class="muted small">{r}</span> })}
             </div>
@@ -311,5 +373,20 @@ mod tests {
         assert_eq!(badge(&l, 2), Some(("out of date", "stale")));
         assert_eq!(badge(&l, 3), Some(("duplicate", "duplicate")));
         assert_eq!(badge(&l, 4), None);
+    }
+
+    /// The stored account matches by ID, sign-in address or email; nothing stored matches nothing.
+    #[test]
+    fn chosen_account() {
+        let a = OpAccount {
+            url: "my.1password.com".into(),
+            email: "a@example.com".into(),
+            account_uuid: "UUID".into(),
+        };
+        assert!(is_chosen(Some("UUID"), &a));
+        assert!(is_chosen(Some("my.1password.com"), &a));
+        assert!(is_chosen(Some("a@example.com"), &a));
+        assert!(!is_chosen(Some("other"), &a));
+        assert!(!is_chosen(None, &a));
     }
 }
