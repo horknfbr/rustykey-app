@@ -2681,7 +2681,12 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 name = "onlykey-core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "rand_core",
  "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "url",
 ]
 
 [[package]]
@@ -3114,6 +3119,12 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "rand_core"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "raw-window-handle"
