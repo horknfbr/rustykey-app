@@ -8,6 +8,8 @@ RustyKey is a Rust port of the OnlyKey desktop app (`reference/OnlyKey-App`, v6.
 3. One UI for every platform: macOS, Windows, Linux (Tauri) and ChromeOS (web build in Chrome).
 4. A menu bar / tray icon with device status and quick actions on macOS, Windows and Linux.
 
+5. 1Password as the source of truth for slot logins (desktop only, one-way push; §1Password sync).
+
 ## Non-goals
 - No new device features (no sign/decrypt/getpubkey; the original never sends them).
 - No migration of the old NW.js app's autostart entries, Login Items or Dock tiles.
@@ -45,6 +47,7 @@ Modules:
 - `password` — password generator (takes an `RngCore`).
 - `encoding` — base32→bytes, hex↔modhex, Latin-1 check.
 - `api` — serde types shared with the UI (below).
+- `onepassword` — 1Password item JSON → slot write plan, limits, otpauth parsing, link tracking (pure; see §1Password sync).
 
 **Engine design: sans-IO.** The engine does no I/O and reads no clock. Drivers feed it events and timestamps:
 
@@ -109,6 +112,7 @@ One tray icon (monochrome template on macOS). Tooltip = status line (macOS/Windo
 OnlyKey Duo — Unlocked · v3.0.4p      (disabled; or "No OnlyKey connected" / "Locked" / "Bootloader")
 Open RustyKey
 Set Device Time Now                   (enabled only when unlocked)
+Sync from 1Password                   (enabled when unlocked and `op` found)
 Check for Updates…                    (app + firmware, forced)
 ──────────
 ✓ Start at Login (in tray)
@@ -129,6 +133,17 @@ Left click: Windows/Linux show the window; macOS opens the menu. Two icon varian
 - Same UI crate with `--features web`; static files, served over HTTPS (GitHub Pages), with a web app manifest so it can be installed to the ChromeOS shelf.
 - WebHID: first connect needs a click ("Connect OnlyKey" button → `navigator.hid.requestDevice` with the PARITY USB IDs). Later visits use `navigator.hid.getDevices()` and `connect`/`disconnect` events.
 - Not in the web build: tray, autostart, close-to-tray, app updater. Firmware "Download Latest" is hidden (GitHub asset downloads have no CORS); loading a firmware file works.
+
+### 1Password sync (desktop only)
+1Password is the source of truth for slot logins. Sync is one way: 1Password → OnlyKey (the device cannot give passwords back).
+- **Mechanism:** run the 1Password CLI `op` (2.x) as a child process, no shell, with the desktop-app integration (Touch ID / Windows Hello). No Rust SDK exists; no service-account tokens. Find `op` on `PATH`, then `/opt/homebrew/bin/op`, `/usr/local/bin/op`, `%LOCALAPPDATA%\Microsoft\WinGet\Links\op.exe`, `C:\Program Files\1Password CLI\op.exe`. Timeout 60 s per call (the user may be at the Touch ID prompt). Pref `op_account` (optional) → `--account`.
+- **Linking:** an item is linked to a slot by the tag `onlykey/slot-N` (N = 1–24; Classic uses 1–12, shown as 1a–6b). `op item list --tags onlykey --format json` lists candidates; `op item get <id> --format json --reveal` reads one item right before writing it. Two items with the same slot tag → error for that slot, nothing written.
+- **Field mapping:** label = custom field named `onlykey label` if present, else item title; username = field with purpose USERNAME; password = purpose PASSWORD; URL = first URL; TOTP = first field of type OTP → secret from its `otpauth://` URI. Sync writes only these fields; delays and tab/return keys set in the slot editor stay on the device.
+- **Limits:** label ≤ 16, URL/username/password ≤ 56, Latin-1 only, TOTP ≤ 57 bytes, DUO-without-PIN rules (PARITY §4 SlotEditor). An item that breaks a limit is skipped with a reason; others continue.
+- **Out-of-date check:** prefs keep `onepassword_links: { slot → { item_id, vault_id, version } }` — no secrets. When the item `version` in 1Password is newer, the slot shows "out of date". A removed tag never wipes the slot (the user wipes by hand).
+- **UI:** Slots page: "Sync from 1Password" (all linked slots, shows per-slot result) and a link badge per slot (linked / out of date). Slot editor: "Fill from 1Password" (pick an item, fills the form; the user still clicks Save). Tray: "Sync from 1Password" (enabled when unlocked and `op` found). Needs the device unlocked.
+- **Security:** secrets from `op` stdout live only in memory until written, in `Zeroizing` buffers; never logged; stderr is passed to the user only after filtering to the first line.
+- Pure parts (item JSON → slot plan, limits, otpauth parsing, link/out-of-date logic) live in `onlykey_core::onepassword`; process running lives in `src-tauri/src/onepassword.rs`.
 
 ### Linux packaging
 Ship `/etc/udev/rules.d/49-rustykey.rules` covering all USB IDs in PARITY §1 (MODE 0660 + `TAG+="uaccess"`, plus `ID_MM_DEVICE_IGNORE` / `MTP_NO_PROBE`), and a `postinst` that runs `udevadm control --reload-rules && udevadm trigger`. Bundles: `.deb` and AppImage. macOS: universal `.dmg`. Windows: NSIS `.exe`.
