@@ -8,10 +8,10 @@ Cargo workspace (`crates/onlykey-core`, `crates/rustykey-ui`, `src-tauri`) per S
 ## 2. [x] Core: protocol, parser, helpers — Careful — after: 1
 `protocol`, `parser`, `device_type`, `encoding`, `backup`, `firmware` (pure parts), `password`, `api` types. Port the logic and the test cases from the matching reference files and their `__tests__` (ResponseParser, deviceTypeFromStatus, firmwareConstants, deviceProduct, configMode, base32, utils, backupVerify, passwordGenerator, firmwareCheck version rules, firmwareDownload asset/digest selection). PARITY §1, §3 (backup, helpers), §4 (password generator), §5 (firmware file + version). Verify: `cargo test -p onlykey-core`; each ported test case named after its TS original.
 
-## 3. [ ] Core: device engine — Fable — after: 2
+## 3. [x] Core: device engine — Fable — after: 2
 `engine` + `transport::MockDevice`, sans-IO as SPEC §Engine design. Every PARITY §2 method as a `Command`; request queue, single pending, predicates, error windows, sleeps, timeouts, epoch abort on disconnect, error remap, status state machine (auto set-time on unlock, 2500 ms stale echo, config-mode inference, message filter), label collection (400 ms quiet), type transitions, Classic PIN prompt/commit/cancel flush, DUO PIN payloads, chunked OKSETPRIV / OKRESTORE (progress events) / firmware blocks, bootloader trigger. Port `MockTransport.ts` behaviour and the store tests that exercise device behaviour (`hotplugConnect`, `connectAnnounce`, `initialize.dip`, `sessionWipe.security`). Verify: `cargo test -p onlykey-core engine::` with deterministic time; clippy clean.
 
-## 4. [ ] Core: key import — Careful — after: 2
+## 4. [x] Core: key import — Careful — after: 2
 `keys`: OpenPGP (rpgp) and SSH/PEM parsing to device bytes + type byte, candidates, Auto Load rules, explicit-slot selection error, backup-passphrase key (sha256), Advanced raw-hex keys, and `Vec<Command>` builders. PARITY §3. Test fixtures: generate keys with `gpg`/`ssh-keygen` (RSA 2048/4096, ed25519/cv25519, P-256, secp256k1 where tools allow), encrypted with a known passphrase, committed under `crates/onlykey-core/tests/fixtures/` (test-only keys). Must compile for wasm32 (`cargo build -p onlykey-core --target wasm32-unknown-unknown`). Verify: tests assert exact bytes (p‖q, scalars) and type bytes.
 
 ## 5. [ ] Desktop: HID service + commands — Careful — after: 3

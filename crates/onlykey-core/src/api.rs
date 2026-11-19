@@ -57,6 +57,10 @@ pub struct Snapshot {
     pub session_epoch: u64,
     /// Connect failure text (drives the udev / permission dialog).
     pub connect_error: Option<String>,
+    /// True while the device reports locked, including a config-mode lock (`state` stays
+    /// `ConfigMode` through it); false when disconnected.
+    #[serde(default)]
+    pub locked: bool,
 }
 
 /// Something the engine tells the UI without being asked.
@@ -79,6 +83,11 @@ pub enum Event {
         /// 0–100.
         percent: u8,
         /// What is running.
+        text: String,
+    },
+    /// A device error (TS `error` event): "Error …" text from firmware, or a refused DUO PIN.
+    Error {
+        /// Error text.
         text: String,
     },
 }
@@ -268,6 +277,9 @@ impl fmt::Debug for Command {
 pub enum Reply {
     /// Finished; nothing to return.
     Done,
+    /// `LoadFirmware` outside the bootloader: the reboot was triggered and the blocks are held;
+    /// they stream when the device reconnects as bootloader (TS `pending-reboot`).
+    FirmwarePending,
     /// Labels read by `GetLabels` (slot n at index n-1).
     Labels {
         /// Slot labels.
