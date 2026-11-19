@@ -46,3 +46,11 @@ SPEC §1Password sync. Core `onepassword` module (pure: item JSON → slot plan 
 
 ## 14. [ ] Parity audit — Heavy — after: 9, 10, 11, 12, 13, 15
 Walk `docs/PARITY.md` line by line against the Rust code; output a gap list with file:line evidence. No code changes. Verify: every PARITY bullet marked present / missing / dropped.
+
+## 14. [x] Parity audit — done; 16/17 fix tasks applied (commit d46f045)
+
+## Open items (after audit fixes)
+- Needs real hardware: every device flow (unlock, PINs, slots, keys, backup/restore, firmware) on an OnlyKey and a DUO; WebHID connect/unplug/write on ChromeOS.
+- Needs per-OS runs: Windows NSIS + tray clicks, Linux deb/AppImage + udev + tray (no tray on stock GNOME without the AppIndicator extension; relaunch shows the window).
+- Manual on macOS: tray "Start at Login" on→off leaves no LaunchAgent; tray "Check for Updates…" shows the window; real 1Password sync (Touch ID timing vs 60 s timeout).
+- Minor gaps: "Downloaded firmware X" shows the checked version, not the downloaded one (`fw_download` returns blocks only); app update has no separate "Install now / Later" step; OpenPGP secp256k1 ECDH subkeys rejected (rpgp); secret bytes in `Command`/packets are not zeroized; web build uses unhashed file names (stale cache window after a Pages deploy).
