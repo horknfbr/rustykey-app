@@ -20,13 +20,16 @@
         "minWidth": 800,
         "minHeight": 400,
         "center": true,
-        "visible": true
+        "visible": false
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    }
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -35,5 +38,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE2RTc4OUQ3M0RDOUJDN0EKUldSNnZNazkxNG5ucGsvdUFFaTd5cm5QdXhxYWVHa0hzalZ5YWtNT0dGSUtzVTY1R0U3NmNxWWMK",
+      "endpoints": [
+        "https://github.com/horknfbr/rustykey-app/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

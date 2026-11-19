@@ -11,13 +11,36 @@
 - `crates/onlykey-core/` — pure Rust core, native + wasm32; no I/O
 - `crates/onlykey-core/src/lib.rs` — module list + `VERSION`; touch when adding a core module
 - `crates/onlykey-core/src/{protocol,parser,device_type,engine,transport,keys,backup,firmware,password,encoding,api,onepassword}.rs` — one module each, per SPEC §onlykey-core
+- `crates/onlykey-core/Cargo.toml` — core deps; wasm32-only `getrandom` 0.2 `js` (pulled by `pgp`)
+- `crates/onlykey-core/src/keys.rs` — key import rules + `Vec<Command>` builders (Keys, Setup backup, Advanced raw hex); `keys/openpgp.rs` (rpgp), `keys/ssh.rs` (OpenSSH/PKCS#1/PKCS#8/SEC1/legacy PEM), `keys/tests.rs`
+- `crates/onlykey-core/src/engine.rs` — sans-IO `Engine`: step-list jobs per `Command`, FIFO queue, status state machine, label reads, snapshot + session epoch, held firmware; timing constants at the top; tests run on `MockRig`
+- `crates/onlykey-core/src/transport.rs` — `MockDevice` firmware simulator + `MockRig` (engine + mock on a virtual clock); built for tests or feature `mock`
+- `crates/onlykey-core/tests/fixtures/keys/` — throwaway test keys + `.expected` device bytes; `gen.sh`/`expected.py` regenerate them
 - `crates/rustykey-ui/` — Leptos 0.8 CSR UI; features `tauri` (default) / `web`
 - `crates/rustykey-ui/index.html` — Trunk entry page
 - `crates/rustykey-ui/Trunk.toml` — Trunk config (dist dir, dev port 1420 = Tauri devUrl)
 - `crates/rustykey-ui/style.css` — design tokens (`:root` dark, `.light`) and layout
-- `crates/rustykey-ui/src/main.rs` — app root and sidebar
+- `crates/rustykey-ui/assets/logo.png` — sidebar logo (copy of `src-tauri/icons/source.png`)
+- `crates/rustykey-ui/src/main.rs` — app root: layout, `SessionKeyed` epoch remount, tab → page switch
+- `crates/rustykey-ui/src/backend/mod.rs` — `Backend` trait, `Prefs`, `Platform`, `backend()` (impl picked by feature)
+- `crates/rustykey-ui/src/backend/tauri.rs` — Tauri impl (`__TAURI__.core.invoke` / `event.listen` `device://event`)
+- `crates/rustykey-ui/src/backend/fake.rs` — `fake` feature: fake unlocked DUO + Ctrl+Shift+D/K state switcher
+- `crates/rustykey-ui/src/backend/web.rs` — `web` feature stub (always disconnected; task 12)
+- `crates/rustykey-ui/src/state.rs` — `AppState` context (snapshot, messages, working, tab, prefs, pin error, confirm), default-tab rules
+- `crates/rustykey-ui/src/shell.rs` — sidebar (logo, theme toggle, tabs, status) and DeviceMessages terminal
+- `crates/rustykey-ui/src/overlays.rs` — disconnected overlay, LockScreen + 1500 ms poll, udev dialog, DUO PIN toast
+- `crates/rustykey-ui/src/components/` — shared Modal, ConfirmDialog, WorkingDialog, form rows, Button, HelpTip, Notice
+- `crates/rustykey-ui/src/pages/{setup,slots,keys,backup,firmware,preferences,advanced,tools}.rs` — one page per tab
 - `src-tauri/` — desktop shell (package `rustykey`): HID thread, tray, prefs, updates
-- `src-tauri/tauri.conf.json` — window, bundle, Trunk dev/build hooks
+- `src-tauri/tauri.conf.json` — window (starts hidden), bundle, Trunk dev/build hooks
 - `src-tauri/capabilities/default.json` — main-window permissions; touch when adding plugins/commands
-- `src-tauri/src/main.rs` — Tauri builder
+- `src-tauri/src/main.rs` — Tauri builder: plugins (single-instance, autostart `--hidden`, store, dialog, opener), `device` / `snapshot` commands, HID service, start hidden/shown, close-to-tray, macOS Reopen
+- `src-tauri/src/prefs.rs` — `Prefs` in `settings.json` (app config dir), `prefs_get` / `prefs_set`, autostart apply, tray rebuild on change
+- `src-tauri/src/tray.rs` — tray icon: status line + menu model (pure, tested), full rebuild on every change, connected-dot icon, menu actions
+- `src-tauri/src/window.rs` — show/hide main window; macOS Regular/Accessory activation policy; `--hidden` check
+- `src-tauri/src/host.rs` — `pick_text_file` (UTF-8, ≤ 4 MB), `save_text_file`, `open_url` (https only)
+- `src-tauri/src/device/mod.rs` — HID driver thread (engine loop, rescan, watchdog, unplug), `DeviceService` (send/snapshot/subscribe)
+- `src-tauri/src/device/select.rs` — PARITY §1 interface selection over `Candidate` lists (+ tests)
+- `src-tauri/src/device/hid.rs` — hidapi `Bus`/`Link`
+- `src-tauri/src/device/mock.rs` — `RUSTYKEY_MOCK` simulated device (feature `mock`, and tests)
 - `src-tauri/icons/` — `source.png` (original key glyph) → `cargo tauri icon` outputs; `tray.png`/`tray@2x.png` monochrome tray template

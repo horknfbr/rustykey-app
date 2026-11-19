@@ -17,7 +17,7 @@ Cargo workspace (`crates/onlykey-core`, `crates/rustykey-ui`, `src-tauri`) per S
 ## 5. [x] Desktop: HID service + commands — Careful — after: 3
 `src-tauri/src/device/`: hidapi driver thread per SPEC §src-tauri, interface selection (PARITY §1), 2 s rescan, connect watchdog, unplug detection, permission error → `connect_error`, pending firmware resume on PID B001, events to webview. Tauri commands `device` and `snapshot`; capabilities file. Verify: unit test for interface selection with fake device-info lists; `cargo build -p rustykey`; manual run with a device if available (report if not).
 
-## 6. [ ] Desktop: tray, window, prefs, autostart — Medium — after: 5
+## 6. [x] Desktop: tray, window, prefs, autostart — Medium — after: 5
 SPEC §Tray, §src-tauri Window/Prefs/Autostart: tray menu rebuilt on every change, status line from Snapshot, quick actions, close-to-tray, `--hidden`, single instance, macOS Accessory policy, autostart plugin, prefs store + `prefs_get/prefs_set`, `pick_text_file`, `save_text_file`, `open_url`. Verify: `cargo build -p rustykey`, `cargo tauri dev` run on macOS; screenshot of menu; report what was checked on each OS.
 
 ## 7. [ ] Desktop: app + firmware updates — Medium — after: 5

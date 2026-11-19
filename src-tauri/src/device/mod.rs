@@ -96,7 +96,6 @@ impl DeviceService {
     }
 
     /// A receiver of every future event (for the tray status line).
-    #[allow(dead_code, reason = "used by the tray (task 6)")]
     pub fn subscribe(&self) -> Receiver<Event> {
         let (tx, rx) = mpsc::channel();
         lock(&self.shared.subscribers).push(tx);
