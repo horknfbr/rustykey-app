@@ -2,7 +2,7 @@
 
 Status: `[ ]` todo, `[~]` in progress, `[x]` accepted. Every task: read `CLAUDE.md`, `docs/SPEC.md`, the cited `docs/PARITY.md` sections and the cited reference TS files. Update `filemap.md` when you add or move files. Every fn gets a one-line `///` doc comment.
 
-## 1. [ ] Scaffold — Medium — after: none
+## 1. [x] Scaffold — Medium — after: none
 Cargo workspace (`crates/onlykey-core`, `crates/rustykey-ui`, `src-tauri`) per SPEC §Architecture, with every core module created as an empty stub with its `///` module doc. Leptos 0.8 CSR app that renders "RustyKey" via Trunk; Tauri 2.12 app whose `frontendDist` is the Trunk output and `beforeDevCommand`/`beforeBuildCommand` run Trunk. `.cargo/config.toml` sets `--cfg=web_sys_unstable_apis` for wasm32. Add `NOTICE` with the upstream BSD licence text (`reference/OnlyKey-App/LICENSE.txt`) and a short credit. `.gitignore`: `target/`, `dist/`, `reference/`. App and tray icons: draw a simple original key glyph (1024 px PNG) and run `cargo tauri icon` on it. Do not reuse the OnlyKey logo (trademark). Verify: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cd crates/rustykey-ui && trunk build`, `cargo build -p rustykey`, and `trunk build --features web`.
 
 ## 2. [ ] Core: protocol, parser, helpers — Careful — after: 1

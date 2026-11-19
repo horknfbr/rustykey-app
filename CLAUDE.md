@@ -6,8 +6,8 @@ Rust port of the OnlyKey app. Tauri 2.12 desktop + Leptos 0.8 (CSR, Trunk) UI + 
 - Test: `cargo test --workspace`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check`
 - Desktop dev: `cargo tauri dev` (needs `cargo install tauri-cli --version ^2 --locked`, `cargo install trunk --locked`, `rustup target add wasm32-unknown-unknown`)
-- Desktop build: `cargo tauri build`
-- Web (ChromeOS) dev: `cd crates/rustykey-ui && trunk serve --features web`
+- Desktop build: `cargo tauri build` (quick macOS check: `cargo tauri build --debug --bundles app`)
+- Web (ChromeOS) dev: `cd crates/rustykey-ui && trunk serve --no-default-features --features web` (build: `trunk build --release --no-default-features --features web`)
 - Core for wasm: `cargo build -p onlykey-core --target wasm32-unknown-unknown`
 
 ## Rules

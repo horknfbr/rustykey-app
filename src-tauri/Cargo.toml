@@ -1,0 +1,16 @@
+[package]
+name = "rustykey"
+description = "RustyKey desktop shell (Tauri)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+onlykey-core = { path = "../crates/onlykey-core" }
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "onlykey-core"
+description = "OnlyKey protocol, engine and data handling; pure Rust, no I/O."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = ["crates/onlykey-core", "crates/rustykey-ui", "src-tauri"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+missing_docs_in_private_items = "warn"

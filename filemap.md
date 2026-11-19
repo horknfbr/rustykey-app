@@ -1,10 +1,23 @@
 # filemap
 
 - `CLAUDE.md` — agent rules and commands
+- `NOTICE` — upstream credit + OnlyKey-App BSD licence; touch when copying more upstream assets
+- `Cargo.toml` — workspace: members, shared package fields, lints (missing docs)
+- `.cargo/config.toml` — wasm32 rustflags (`web_sys_unstable_apis`, getrandom `wasm_js`)
 - `docs/SPEC.md` — architecture, API types, tray, design tokens
 - `docs/PLAN.md` — task list and status
 - `docs/PARITY.md` — every feature of the original app; the done checklist
 - `reference/OnlyKey-App/` — original TS app, read-only, gitignored
-- `crates/onlykey-core/` — protocol, engine, keys, backup, firmware, password (created in task 1)
-- `crates/rustykey-ui/` — Leptos UI, Backend trait, tauri + web impls (task 1)
-- `src-tauri/` — desktop shell: HID thread, tray, prefs, updates (task 1)
+- `crates/onlykey-core/` — pure Rust core, native + wasm32; no I/O
+- `crates/onlykey-core/src/lib.rs` — module list + `VERSION`; touch when adding a core module
+- `crates/onlykey-core/src/{protocol,parser,device_type,engine,transport,keys,backup,firmware,password,encoding,api,onepassword}.rs` — one module each, per SPEC §onlykey-core
+- `crates/rustykey-ui/` — Leptos 0.8 CSR UI; features `tauri` (default) / `web`
+- `crates/rustykey-ui/index.html` — Trunk entry page
+- `crates/rustykey-ui/Trunk.toml` — Trunk config (dist dir, dev port 1420 = Tauri devUrl)
+- `crates/rustykey-ui/style.css` — design tokens (`:root` dark, `.light`) and layout
+- `crates/rustykey-ui/src/main.rs` — app root and sidebar
+- `src-tauri/` — desktop shell (package `rustykey`): HID thread, tray, prefs, updates
+- `src-tauri/tauri.conf.json` — window, bundle, Trunk dev/build hooks
+- `src-tauri/capabilities/default.json` — main-window permissions; touch when adding plugins/commands
+- `src-tauri/src/main.rs` — Tauri builder
+- `src-tauri/icons/` — `source.png` (original key glyph) → `cargo tauri icon` outputs; `tray.png`/`tray@2x.png` monochrome tray template

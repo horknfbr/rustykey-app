@@ -1,0 +1,20 @@
+[package]
+name = "rustykey-ui"
+description = "RustyKey Leptos (CSR) user interface, built with Trunk."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[features]
+default = ["tauri"]
+# Desktop build: talks to src-tauri through window.__TAURI__.
+tauri = []
+# Browser build (ChromeOS, WebHID). Build with `--no-default-features --features web`.
+web = []
+
+[dependencies]
+leptos = { version = "0.8", features = ["csr"] }
+onlykey-core = { path = "../onlykey-core" }
+
+[lints]
+workspace = true
