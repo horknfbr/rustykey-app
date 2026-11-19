@@ -7,6 +7,7 @@ mod device;
 mod host;
 mod prefs;
 mod tray;
+mod updates;
 mod window;
 
 use device::{Bus, DeviceService};
@@ -58,6 +59,8 @@ fn main() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::default())
         .setup(|app| {
             let handle = app.handle().clone();
             let svc = DeviceService::spawn(make_bus, move |event| {
@@ -95,6 +98,10 @@ fn main() {
             host::pick_text_file,
             host::save_text_file,
             host::open_url,
+            updates::app_update_check,
+            updates::app_update_install,
+            updates::fw_check,
+            updates::fw_download,
         ])
         .build(tauri::generate_context!())
         .expect("error while building RustyKey")

@@ -34,6 +34,8 @@ hidapi = { version = "2.6", default-features = false, features = ["windows-nativ
 
 [dev-dependencies]
 onlykey-core = { path = "../crates/onlykey-core", features = ["mock"] }
+sha2 = "0.10"
+tauri = { version = "2.12", features = ["test"] }
 
 [features]
 # Dev aid: `RUSTYKEY_MOCK=classic|duo|uninitialized|bootloader` drives a simulated device.

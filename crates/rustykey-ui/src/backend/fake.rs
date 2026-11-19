@@ -230,6 +230,8 @@ impl Backend for FakeBackend {
         Ok(Some(AppUpdate {
             version: "0.2.0".into(),
             notes: "Fake release.".into(),
+            can_install: true,
+            release_url: "https://github.com/horknfbr/rustykey-app/releases/latest".into(),
         }))
     }
 

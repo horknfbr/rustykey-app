@@ -78,6 +78,10 @@ pub struct AppUpdate {
     /// Release notes (may be empty).
     #[serde(default)]
     pub notes: String,
+    /// This install can update itself (false on a Linux `.deb`: show "Open release page" instead).
+    pub can_install: bool,
+    /// Release page for installs that cannot update themselves.
+    pub release_url: String,
 }
 
 /// A newer firmware release found by [`Backend::fw_check`].
@@ -99,6 +103,8 @@ pub trait Backend {
     async fn snapshot(&self) -> Snapshot;
     /// Registers `f` for every device event; call once at startup.
     fn on_event(&self, f: impl Fn(Event) + 'static);
+    /// Registers `f` for the tray's "Check for Updates…" (`host://check-updates`); no-op without a tray.
+    fn on_check_updates(&self, _f: impl Fn() + 'static) {}
     /// Reads prefs (defaults if the host has none).
     async fn prefs_get(&self) -> Prefs;
     /// Stores prefs.

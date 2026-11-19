@@ -105,6 +105,15 @@ impl Backend for TauriBackend {
         });
     }
 
+    /// Listens on `host://check-updates` (tray "Check for Updates…"); the closure lives for the app's lifetime.
+    fn on_check_updates(&self, f: impl Fn() + 'static) {
+        let handler = Closure::<dyn Fn(JsValue)>::new(move |_: JsValue| f());
+        wasm_bindgen_futures::spawn_local(async move {
+            let _ = listen("host://check-updates", &handler).await;
+            handler.forget();
+        });
+    }
+
     /// `prefs_get`.
     async fn prefs_get(&self) -> Prefs {
         call("prefs_get", NoArgs {}).await.unwrap_or_default()

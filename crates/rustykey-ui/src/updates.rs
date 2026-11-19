@@ -90,6 +90,10 @@ pub struct AppStore {
     total: ArcRwSignal<Option<u64>>,
     /// An auto-check already ran this app session.
     checked: ArcRwSignal<bool>,
+    /// The found release can be installed in place (false on a Linux `.deb`).
+    can_install: ArcRwSignal<bool>,
+    /// Release page for installs that cannot update themselves.
+    release_url: ArcRwSignal<String>,
 }
 
 thread_local! {
@@ -114,6 +118,8 @@ thread_local! {
         received: ArcRwSignal::new(0),
         total: ArcRwSignal::new(None),
         checked: ArcRwSignal::new(false),
+        can_install: ArcRwSignal::new(true),
+        release_url: ArcRwSignal::new(String::new()),
     };
     /// Bumps on unplug so firmware results from before it are dropped (`generation`).
     static FW_GENERATION: Cell<u64> = const { Cell::new(0) };
@@ -136,6 +142,7 @@ fn fw_gen() -> u64 {
 
 /// True for host errors that should pop the dialog even on an automatic check (`autoDownloadErrorShowsModal`):
 /// integrity, location and parse failures. Plain network failures stay quiet.
+/// The host words its errors to match these keywords: keep in step with `src-tauri/src/updates.rs`.
 fn serious(message: &str) -> bool {
     ["SHA-256", "refused", "parsed", "installer"]
         .iter()
@@ -416,6 +423,8 @@ async fn app_run_check(force: bool) {
     match backend().app_update_check(force).await {
         Ok(Some(update)) => {
             s.latest.set(Some(update.version));
+            s.can_install.set(update.can_install);
+            s.release_url.set(update.release_url);
             s.phase.set(Phase::Available);
             s.prompt.set(true);
         }
@@ -475,6 +484,13 @@ fn app_confirm_download() {
             Err(e) => app_present_error(e, true),
         }
     });
+}
+
+/// Dialog "Open release page" for installs that cannot update themselves (Linux `.deb`).
+fn app_open_release_page() {
+    let url = app_updates().release_url.get_untracked();
+    app_dismiss();
+    spawn_local(async move { backend().open_url(&url).await });
 }
 
 /// Dialog "Later" / "OK" (`dismissUpdatePrompt`).
@@ -625,11 +641,20 @@ fn app_dialog_view() -> DialogView {
     let current = env!("CARGO_PKG_VERSION");
     let pct = percent(s.received.get(), s.total.get());
     let (title, message, cancel, confirm, percent) = match s.phase.get() {
-        Phase::Available => (
+        Phase::Available if s.can_install.get() => (
             "App update available",
             format!("Version {latest} is available. You have {current}. Download the update?"),
             Some(("Later", false)),
             Some("Download"),
+            None,
+        ),
+        Phase::Available => (
+            "App update available",
+            format!(
+                "Version {latest} is available. You have {current}. This installation cannot update itself; get the new version from the release page."
+            ),
+            Some(("Later", false)),
+            Some("Open release page"),
             None,
         ),
         Phase::Downloading => (
@@ -804,7 +829,13 @@ fn AppUpdateHost() -> impl IntoView {
     move || {
         open().then(|| {
             let on_cancel = Callback::new(move |()| app_dismiss());
-            let on_confirm = Callback::new(move |()| app_confirm_download());
+            let on_confirm = Callback::new(move |()| {
+                if app_updates().can_install.get_untracked() {
+                    app_confirm_download();
+                } else {
+                    app_open_release_page();
+                }
+            });
             dialog(app_dialog_view(), on_cancel, on_confirm)
         })
     }
@@ -816,6 +847,11 @@ pub fn UpdateHosts() -> impl IntoView {
     let app = use_app();
     let loaded = RwSignal::new(false);
     follow_progress(app);
+    // Tray "Check for Updates…": forced app + firmware checks, shown like "Check now".
+    backend().on_check_updates(move || {
+        app_check_now();
+        fw_check_now(app);
+    });
     spawn_local(async move {
         // Read prefs ourselves so a stored "off" is honoured before the first check.
         let prefs = backend().prefs_get().await;

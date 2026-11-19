@@ -20,7 +20,7 @@ Cargo workspace (`crates/onlykey-core`, `crates/rustykey-ui`, `src-tauri`) per S
 ## 6. [x] Desktop: tray, window, prefs, autostart — Medium — after: 5
 SPEC §Tray, §src-tauri Window/Prefs/Autostart: tray menu rebuilt on every change, status line from Snapshot, quick actions, close-to-tray, `--hidden`, single instance, macOS Accessory policy, autostart plugin, prefs store + `prefs_get/prefs_set`, `pick_text_file`, `save_text_file`, `open_url`. Verify: `cargo build -p rustykey`, `cargo tauri dev` run on macOS; screenshot of menu; report what was checked on each OS.
 
-## 7. [ ] Desktop: app + firmware updates — Medium — after: 5
+## 7. [x] Desktop: app + firmware updates — Medium — after: 5
 Updater plugin (SPEC §App updates) and firmware fetch (PARITY §5 Firmware, SPEC §Firmware fetch) with commands `app_update_check/install`, `fw_check/fw_download`, once-per-session + pref gating + timeouts. Unit-test the redirect allowlist and digest check with canned JSON. Document key generation (`cargo tauri signer generate`) in `docs/RELEASE.md`. Verify: tests; a live `fw_check` against GitHub returns the current firmware version.
 
 ## 8. [x] UI: shell, bridge, lock screen — Medium — after: 2
