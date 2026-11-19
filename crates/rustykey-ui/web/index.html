@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RustyKey</title>
+    <link data-trunk rel="css" href="../style.css" />
+    <link data-trunk rel="copy-dir" href="../assets" />
+    <link data-trunk rel="copy-dir" href="icons" />
+    <link data-trunk rel="copy-file" href="manifest.webmanifest" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="icons/icon-256.png" />
+    <link
+      data-trunk
+      rel="rust"
+      href="../Cargo.toml"
+      data-bin="rustykey-ui"
+      data-cargo-no-default-features
+      data-cargo-features="web"
+    />
+  </head>
+  <body></body>
+</html>

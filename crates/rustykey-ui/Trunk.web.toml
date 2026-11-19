@@ -1,0 +1,10 @@
+# Browser (ChromeOS, WebHID) build: `trunk build --release --config Trunk.web.toml` → dist-web/.
+# Features come from the rust link in web/index.html; dist/ (desktop) is never touched.
+[build]
+target = "web/index.html"
+dist = "dist-web"
+# Relative asset URLs, so the site works under a sub-path (GitHub Pages).
+public_url = "./"
+
+[serve]
+port = 1421

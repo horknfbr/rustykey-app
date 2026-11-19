@@ -7,6 +7,7 @@
 - `docs/SPEC.md` — architecture, API types, tray, design tokens
 - `docs/PLAN.md` — task list and status
 - `docs/PARITY.md` — every feature of the original app; the done checklist
+- `docs/RELEASE.md` — updater signing key, where it lives, CI secret names
 - `reference/OnlyKey-App/` — original TS app, read-only, gitignored
 - `crates/onlykey-core/` — pure Rust core, native + wasm32; no I/O
 - `crates/onlykey-core/src/lib.rs` — module list + `VERSION`; touch when adding a core module
@@ -19,25 +20,30 @@
 - `crates/rustykey-ui/` — Leptos 0.8 CSR UI; features `tauri` (default) / `web`
 - `crates/rustykey-ui/index.html` — Trunk entry page
 - `crates/rustykey-ui/Trunk.toml` — Trunk config (dist dir, dev port 1420 = Tauri devUrl)
+- `crates/rustykey-ui/Trunk.web.toml` — browser (ChromeOS) Trunk config: `web/index.html` → `dist-web/`, relative URLs, port 1421
+- `crates/rustykey-ui/web/` — web-build-only page (`index.html`, features `web`), `manifest.webmanifest` (installable PWA), `icons/` (from `src-tauri/icons/`)
 - `crates/rustykey-ui/style.css` — design tokens (`:root` dark, `.light`) and layout
 - `crates/rustykey-ui/assets/logo.png` — sidebar logo (copy of `src-tauri/icons/source.png`)
 - `crates/rustykey-ui/src/main.rs` — app root: layout, `SessionKeyed` epoch remount, tab → page switch
 - `crates/rustykey-ui/src/backend/mod.rs` — `Backend` trait, `Prefs`, `Platform`, `backend()` (impl picked by feature)
-- `crates/rustykey-ui/src/backend/tauri.rs` — Tauri impl (`__TAURI__.core.invoke` / `event.listen` `device://event`)
+- `crates/rustykey-ui/src/backend/tauri.rs` — Tauri impl (`__TAURI__.core.invoke` / `event.listen` `device://event`, `host://check-updates`)
 - `crates/rustykey-ui/src/backend/fake.rs` — `fake` feature: fake unlocked DUO + Ctrl+Shift+D/K state switcher
-- `crates/rustykey-ui/src/backend/web.rs` — `web` feature stub (always disconnected; task 12)
+- `crates/rustykey-ui/src/backend/web/mod.rs` — `web` feature `Backend`: localStorage prefs, file input / blob download, https-only `window.open`, `request_device()` for the Connect button
+- `crates/rustykey-ui/src/backend/web/hid.rs` — WebHID driver: one `Engine` per page, input reports / `setTimeout` deadlines / connect-disconnect events, interface selection, 2 s rescan, 20 s watchdog
 - `crates/rustykey-ui/src/state.rs` — `AppState` context (snapshot, messages, working, tab, prefs, pin error, confirm), default-tab rules
 - `crates/rustykey-ui/src/shell.rs` — sidebar (logo, theme toggle, tabs, status) and DeviceMessages terminal
-- `crates/rustykey-ui/src/overlays.rs` — disconnected overlay, LockScreen + 1500 ms poll, udev dialog, DUO PIN toast
+- `crates/rustykey-ui/src/overlays.rs` — disconnected overlay (+ web "Connect OnlyKey"), LockScreen + 1500 ms poll, udev dialog, DUO PIN toast
+- `crates/rustykey-ui/src/updates.rs` — app + firmware update stores, auto-checks, tray "Check for Updates…", update dialogs ("Open release page" on `.deb`)
 - `crates/rustykey-ui/src/components/` — shared Modal, ConfirmDialog, WorkingDialog, form rows, Button, HelpTip, Notice
 - `crates/rustykey-ui/src/pages/{setup,slots,keys,backup,firmware,preferences,advanced,tools}.rs` — one page per tab
 - `src-tauri/` — desktop shell (package `rustykey`): HID thread, tray, prefs, updates
-- `src-tauri/tauri.conf.json` — window (starts hidden), bundle, Trunk dev/build hooks
+- `src-tauri/tauri.conf.json` — window (starts hidden), bundle (+ updater artifacts), Trunk dev/build hooks, updater pubkey + endpoint
 - `src-tauri/capabilities/default.json` — main-window permissions; touch when adding plugins/commands
 - `src-tauri/src/main.rs` — Tauri builder: plugins (single-instance, autostart `--hidden`, store, dialog, opener), `device` / `snapshot` commands, HID service, start hidden/shown, close-to-tray, macOS Reopen
 - `src-tauri/src/prefs.rs` — `Prefs` in `settings.json` (app config dir), `prefs_get` / `prefs_set`, autostart apply, tray rebuild on change
 - `src-tauri/src/tray.rs` — tray icon: status line + menu model (pure, tested), full rebuild on every change, connected-dot icon, menu actions
 - `src-tauri/src/window.rs` — show/hide main window; macOS Regular/Accessory activation policy; `--hidden` check
+- `src-tauri/src/updates.rs` — `app_update_check` / `app_update_install` (updater plugin, once per session, `.deb` detection, restart) and `fw_check` / `fw_download` (GitHub, redirect-hop allowlist, SHA-256, session cache) + tests
 - `src-tauri/src/host.rs` — `pick_text_file` (UTF-8, ≤ 4 MB), `save_text_file`, `open_url` (https only)
 - `src-tauri/src/device/mod.rs` — HID driver thread (engine loop, rescan, watchdog, unplug), `DeviceService` (send/snapshot/subscribe)
 - `src-tauri/src/device/select.rs` — PARITY §1 interface selection over `Candidate` lists (+ tests)

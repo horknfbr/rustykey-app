@@ -1,6 +1,6 @@
 //! Global overlays: disconnected screen, LockScreen (+ 1500 ms status poll), udev dialog, DUO PIN error toast.
 
-use crate::backend::{Backend, Platform, backend};
+use crate::backend::{Backend, backend};
 use crate::components::{Button, Modal, Notice, NoticeKind};
 use crate::state::{Tab, is_locked, use_app};
 use leptos::prelude::*;
@@ -38,9 +38,21 @@ fn is_linux() -> bool {
         .is_ok_and(|ua| ua.contains("Linux") && !ua.contains("Android"))
 }
 
-/// True when the page has no WebHID (`navigator.hid`).
-fn webhid_missing() -> bool {
-    !js_sys::Reflect::has(&window().navigator(), &"hid".into()).unwrap_or(false)
+/// "Connect OnlyKey" (web build, when the page has WebHID): Chrome's device chooser, then connect.
+/// Without WebHID the snapshot's `connect_error` explains instead.
+#[component]
+fn ConnectButton() -> impl IntoView {
+    #[cfg(all(feature = "web", not(feature = "fake")))]
+    {
+        let has_hid = js_sys::Reflect::has(&window().navigator(), &"hid".into()).unwrap_or(false);
+        has_hid.then(|| {
+            view! {
+                <Button on:click=|_| spawn_local(async { backend().request_device().await })>
+                    "Connect OnlyKey"
+                </Button>
+            }
+        })
+    }
 }
 
 /// "Searching for OnlyKey..." cover over every tab except Tools.
@@ -50,7 +62,6 @@ pub fn DisconnectedOverlay() -> impl IntoView {
     let show = move || {
         app.snapshot.with(|s| s.state == DeviceState::Disconnected) && app.tab.get() != Tab::Tools
     };
-    let hid_hint = backend().platform() == Platform::Web && webhid_missing();
     view! {
         <Show when=show>
             <div class="overlay" data-testid="disconnected-overlay">
@@ -61,14 +72,7 @@ pub fn DisconnectedOverlay() -> impl IntoView {
                 <p class="muted">
                     "Please insert your OnlyKey into a USB port. The app will automatically detect and connect to your device."
                 </p>
-                {hid_hint
-                    .then(|| {
-                        view! {
-                            <Notice kind=NoticeKind::Error>
-                                "WebHID is unavailable in this browser. Open RustyKey in Chrome."
-                            </Notice>
-                        }
-                    })}
+                <ConnectButton />
                 {move || {
                     app.snapshot
                         .with(|s| s.connect_error.clone())

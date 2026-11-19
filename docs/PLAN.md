@@ -35,7 +35,7 @@ PARITY §4 Slots/SlotEditor/Password generator, device photos, DUO profiles, fie
 ## 11. [x] UI: Keys, Backup, Firmware, Preferences, Advanced, Tools — Medium — after: 8, 4
 PARITY §4 for those six pages, including PrivateKeySelectDialog and AppUpdateDialog / FirmwareUpdateDialog. Verify: `trunk build`; per-page control checklist vs the TS component.
 
-## 12. [ ] Web build for ChromeOS — Careful — after: 3, 8
+## 12. [x] Web build for ChromeOS — Careful — after: 3, 8
 `web` Backend: WebHID driver running the core engine (SPEC §Web build), localStorage prefs, file input / download, connect button, web manifest, hide desktop-only controls. Verify: `trunk build --release --features web`; served locally, Chrome shows the WebHID picker with the OnlyKey filter.
 
 ## 13. [ ] Packaging + CI — Medium — after: 6, 7, 12

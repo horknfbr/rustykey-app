@@ -9,8 +9,26 @@ license.workspace = true
 default = ["tauri"]
 # Desktop build: talks to src-tauri through window.__TAURI__.
 tauri = []
-# Browser build (ChromeOS, WebHID). Build with `--no-default-features --features web`.
-web = []
+# Browser build (ChromeOS, WebHID). Build with `trunk build --config Trunk.web.toml`.
+web = [
+    "web-sys/Blob",
+    "web-sys/BlobPropertyBag",
+    "web-sys/File",
+    "web-sys/FileList",
+    "web-sys/Hid",
+    "web-sys/HidCollectionInfo",
+    "web-sys/HidConnectionEvent",
+    "web-sys/HidDevice",
+    "web-sys/HidDeviceFilter",
+    "web-sys/HidDeviceRequestOptions",
+    "web-sys/HidInputReportEvent",
+    "web-sys/HtmlAnchorElement",
+    "web-sys/HtmlInputElement",
+    "web-sys/Performance",
+    "web-sys/Storage",
+    "web-sys/Url",
+    "web-sys/console",
+]
 # Browser dev/screenshot build with a fake device. `--no-default-features --features fake`.
 fake = []
 
