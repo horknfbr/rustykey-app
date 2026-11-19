@@ -5,6 +5,7 @@
 
 mod device;
 mod host;
+mod onepassword;
 mod prefs;
 mod tray;
 mod updates;
@@ -102,6 +103,12 @@ fn main() {
             updates::app_update_install,
             updates::fw_check,
             updates::fw_download,
+            onepassword::op_status,
+            onepassword::op_set_account,
+            onepassword::op_list,
+            onepassword::op_sync,
+            onepassword::op_logins,
+            onepassword::op_item_form,
         ])
         .build(tauri::generate_context!())
         .expect("error while building RustyKey")

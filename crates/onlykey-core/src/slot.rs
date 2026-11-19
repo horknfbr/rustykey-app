@@ -65,6 +65,29 @@ pub struct SlotForm {
     pub yubikey: Option<Yubikey>,
 }
 
+impl zeroize::Zeroize for SlotForm {
+    /// Wipes every text value (secrets included) so a `Zeroizing<SlotForm>` clears on drop.
+    fn zeroize(&mut self) {
+        for v in [
+            &mut self.label,
+            &mut self.url,
+            &mut self.username,
+            &mut self.totp,
+        ] {
+            v.zeroize();
+        }
+        if let Some((pw, confirm)) = &mut self.password {
+            pw.zeroize();
+            confirm.zeroize();
+        }
+        if let Some(y) = &mut self.yubikey {
+            y.public_id.zeroize();
+            y.private_id.zeroize();
+            y.secret_key.zeroize();
+        }
+    }
+}
+
 /// Why a slot form cannot be written; `Display` is the user-facing text (never the value).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotError {

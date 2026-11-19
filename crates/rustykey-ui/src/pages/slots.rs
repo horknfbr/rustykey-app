@@ -2,12 +2,14 @@
 
 mod editor;
 mod generator;
+mod onepassword;
 
 use crate::backend::{Backend, backend};
 use crate::components::HelpTip;
 use crate::state::{AppState, use_app};
 use editor::SlotEditor;
 use leptos::prelude::*;
+use onepassword::{LinkBadge, OpLinks, SyncPanel, op_supported};
 use onlykey_core::api::{Command, DeviceError, DeviceKind, Reply};
 use onlykey_core::protocol::{CLASSIC_SLOT_ROWS, DUO_PROFILE_COLUMNS, DUO_PROFILES, SlotCell};
 
@@ -42,6 +44,11 @@ pub fn SlotsPage() -> impl IntoView {
     let selected = RwSignal::new(None::<u8>);
     let on_select = Callback::new(move |i: u8| selected.set(Some(i)));
     let is_duo = move || app.snapshot.with(|s| s.kind == DeviceKind::Duo);
+    let op_links = op_supported().then(|| {
+        let links = RwSignal::new(Vec::new());
+        provide_context(OpLinks(links));
+        links
+    });
     view! {
         <h2 class="page-title">"Configure Slots"</h2>
         <div class="slots-content">
@@ -54,6 +61,7 @@ pub fn SlotsPage() -> impl IntoView {
                     "Slots shown as {EMPTY_SLOT_LABEL} have no label set on the device. For security, the app only receives slot labels — not URLs, usernames, passwords, or other fields — so {EMPTY_SLOT_LABEL} does not mean a slot is unused.",
                 )}
             </p>
+            {op_links.map(|links| view! { <SyncPanel links /> })}
             <hr class="slots-divider" />
             {move || {
                 if is_duo() {
@@ -252,6 +260,7 @@ fn SlotPill(
                     }}
                 </span>
             </button>
+            <LinkBadge index=cell.index />
         </div>
     }
 }

@@ -25,7 +25,7 @@
 - `crates/rustykey-ui/style.css` — design tokens (`:root` dark, `.light`) and layout
 - `crates/rustykey-ui/assets/logo.png` — sidebar logo (copy of `src-tauri/icons/source.png`)
 - `crates/rustykey-ui/src/main.rs` — app root: layout, `SessionKeyed` epoch remount, tab → page switch
-- `crates/rustykey-ui/src/backend/mod.rs` — `Backend` trait, `Prefs`, `Platform`, `backend()` (impl picked by feature)
+- `crates/rustykey-ui/src/backend/mod.rs` — `Backend` trait (1Password methods default to "desktop only"), `Prefs`, `Platform`, `backend()` (impl picked by feature)
 - `crates/rustykey-ui/src/backend/tauri.rs` — Tauri impl (`__TAURI__.core.invoke` / `event.listen` `device://event`, `host://check-updates`)
 - `crates/rustykey-ui/src/backend/fake.rs` — `fake` feature: fake unlocked DUO + Ctrl+Shift+D/K state switcher
 - `crates/rustykey-ui/src/backend/web/mod.rs` — `web` feature `Backend`: localStorage prefs, file input / blob download, https-only `window.open`, `request_device()` for the Connect button
@@ -36,11 +36,13 @@
 - `crates/rustykey-ui/src/updates.rs` — app + firmware update stores, auto-checks, tray "Check for Updates…", update dialogs ("Open release page" on `.deb`)
 - `crates/rustykey-ui/src/components/` — shared Modal, ConfirmDialog, WorkingDialog, form rows, Button, HelpTip, Notice
 - `crates/rustykey-ui/src/pages/{setup,slots,keys,backup,firmware,preferences,advanced,tools}.rs` — one page per tab
+- `crates/rustykey-ui/src/pages/slots/onepassword.rs` — desktop-only 1Password UI: Slots "Sync from 1Password" panel + results, per-slot link badge (`OpLinks` context), editor "Fill from 1Password" picker
 - `src-tauri/` — desktop shell (package `rustykey`): HID thread, tray, prefs, updates
 - `src-tauri/tauri.conf.json` — window (starts hidden), bundle (+ updater artifacts), Trunk dev/build hooks, updater pubkey + endpoint
 - `src-tauri/capabilities/default.json` — main-window permissions; touch when adding plugins/commands
 - `src-tauri/src/main.rs` — Tauri builder: plugins (single-instance, autostart `--hidden`, store, dialog, opener), `device` / `snapshot` commands, HID service, start hidden/shown, close-to-tray, macOS Reopen
 - `src-tauri/src/prefs.rs` — `Prefs` in `settings.json` (app config dir), `prefs_get` / `prefs_set`, autostart apply, tray rebuild on change
+- `src-tauri/src/onepassword.rs` — 1Password sync: find/run `op` (no shell, 60 s kill, zeroizing stdout, first stderr line), `onepassword.json` store (links, `op_account`), commands `op_status` / `op_set_account` / `op_list` / `op_sync` / `op_logins` / `op_item_form`, tray sync
 - `src-tauri/src/tray.rs` — tray icon: status line + menu model (pure, tested), full rebuild on every change, connected-dot icon, menu actions
 - `src-tauri/src/window.rs` — show/hide main window; macOS Regular/Accessory activation policy; `--hidden` check
 - `src-tauri/src/updates.rs` — `app_update_check` / `app_update_install` (updater plugin, once per session, `.deb` detection, restart) and `fw_check` / `fw_download` (GitHub, redirect-hop allowlist, SHA-256, session cache) + tests

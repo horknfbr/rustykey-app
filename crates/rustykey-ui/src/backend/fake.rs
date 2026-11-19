@@ -8,6 +8,9 @@ use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs};
 use leptos::ev::keydown;
 use leptos::prelude::window_event_listener;
 use onlykey_core::api::{Command, DeviceError, DeviceKind, DeviceState, Event, Reply, Snapshot};
+use onlykey_core::onepassword::{
+    ItemFill, LinkStatus, LinkedSlot, OpAccount, OpLogin, OpStatus, SlotSyncResult,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -260,6 +263,89 @@ impl Backend for FakeBackend {
     async fn fw_download(&self) -> Result<Vec<Vec<u8>>, String> {
         sleep(600).await;
         Ok(vec![vec![0u8; 32]; 4])
+    }
+
+    /// `op` 2.42.0 with one account.
+    async fn op_status(&self) -> Result<OpStatus, String> {
+        Ok(OpStatus {
+            available: true,
+            version: Some("2.42.0".into()),
+            accounts: vec![OpAccount {
+                url: "my.1password.com".into(),
+                email: "someone@example.com".into(),
+                account_uuid: "FAKEACCOUNT".into(),
+            }],
+            account: None,
+            error: None,
+        })
+    }
+
+    /// Slot 1 synced, 3 out of date, 5 tagged twice, 7 never synced.
+    async fn op_list(&self) -> Result<Vec<LinkedSlot>, String> {
+        sleep(300).await;
+        let row = |slot, id: &str, title: &str, status| LinkedSlot {
+            slot,
+            item_id: id.into(),
+            title: title.into(),
+            vault: "Private".into(),
+            version: 2,
+            status,
+        };
+        Ok(vec![
+            row(1, "fake1", "GitHub", LinkStatus::Synced),
+            row(3, "fake3", "Bank", LinkStatus::OutOfDate),
+            row(5, "fake5a", "VPN", LinkStatus::Duplicate),
+            row(5, "fake5b", "VPN (old)", LinkStatus::Duplicate),
+            row(7, "fake7", "Work SSO", LinkStatus::NeverSynced),
+        ])
+    }
+
+    /// After 600 ms: slots 1, 3 and 7 written, 5 refused as a duplicate.
+    async fn op_sync(&self, _slots: Option<Vec<u8>>) -> Result<Vec<SlotSyncResult>, String> {
+        sleep(600).await;
+        let res = |slot, ok, message: &str| SlotSyncResult {
+            slot,
+            ok,
+            message: message.into(),
+        };
+        Ok(vec![
+            res(1, true, "Wrote \"GitHub\"."),
+            res(3, true, "Wrote \"Bank\"."),
+            res(
+                5,
+                false,
+                "2 items are tagged onlykey/slot-5; keep the tag on one item. Nothing was written.",
+            ),
+            res(7, true, "Wrote \"Work SSO\"."),
+        ])
+    }
+
+    /// A few made-up Login titles.
+    async fn op_logins(&self) -> Result<Vec<OpLogin>, String> {
+        sleep(300).await;
+        Ok(
+            ["Bank", "Email", "GitHub", "Router admin", "VPN", "Work SSO"]
+                .iter()
+                .enumerate()
+                .map(|(i, t)| OpLogin {
+                    id: format!("fake{i}"),
+                    title: (*t).into(),
+                    vault: "Private".into(),
+                })
+                .collect(),
+        )
+    }
+
+    /// Made-up values for any item.
+    async fn op_item_form(&self, _id: &str) -> Result<ItemFill, String> {
+        sleep(300).await;
+        Ok(ItemFill {
+            label: Some("GitHub".into()),
+            url: Some("https://github.com/login".into()),
+            username: Some("someone@example.com".into()),
+            password: Some("not-a-real-password".into()),
+            totp: Some("JBSWY3DPEHPK3PXP".into()),
+        })
     }
 
     /// Acts as desktop so desktop-only controls show in screenshots.

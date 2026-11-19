@@ -60,8 +60,9 @@ pub fn status_line(snap: &Snapshot) -> String {
     }
 }
 
-/// The full menu for these prefs and this device snapshot, top to bottom.
-pub fn model(prefs: &Prefs, snap: &Snapshot) -> Vec<Entry> {
+/// The full menu for these prefs and this device snapshot, top to bottom; `op_found` = the
+/// 1Password CLI is installed.
+pub fn model(prefs: &Prefs, snap: &Snapshot, op_found: bool) -> Vec<Entry> {
     let item = |id, text: &str, enabled| Entry::Item {
         id,
         text: text.into(),
@@ -73,8 +74,11 @@ pub fn model(prefs: &Prefs, snap: &Snapshot) -> Vec<Entry> {
         item("status", &status_line(snap), false),
         item("open", "Open RustyKey", true),
         item("set_time", "Set Device Time Now", unlocked),
-        // Task 15 (1Password sync) enables this when unlocked and the `op` CLI is found.
-        item("sync_1password", "Sync from 1Password", false),
+        item(
+            "sync_1password",
+            "Sync from 1Password",
+            unlocked && op_found,
+        ),
         item("check_updates", "Check for Updates…", true),
         Entry::Separator,
         check("autostart", "Start at Login (in tray)", prefs.autostart),
@@ -166,7 +170,8 @@ fn refresh_with(app: &AppHandle, snap: &Snapshot) {
     let (Some(tray), Some(state)) = (app.tray_by_id(TRAY_ID), app.try_state::<TrayState>()) else {
         return;
     };
-    let entries = model(&prefs::current(app), snap);
+    let op_found = crate::onepassword::find_op().is_some();
+    let entries = model(&prefs::current(app), snap, op_found);
     let connected = snap.state != DeviceState::Disconnected;
     {
         let mut last = state.last.lock().unwrap_or_else(PoisonError::into_inner);
@@ -209,6 +214,7 @@ fn on_menu(app: &AppHandle, id: &str) {
                 let _ = app.state::<DeviceService>().send(Command::SetTime).await;
             });
         }
+        "sync_1password" => crate::onepassword::sync_from_tray(app),
         "check_updates" => {
             let _ = app.emit("host://check-updates", ());
         }
@@ -337,7 +343,8 @@ mod tests {
             auto_update: false,
             ..Prefs::default()
         };
-        let m = model(&prefs, &snap(DeviceState::Unlocked, Some("v3.0.4-prodp")));
+        let unlocked = snap(DeviceState::Unlocked, Some("v3.0.4-prodp"));
+        let m = model(&prefs, &unlocked, true);
         let labels: Vec<String> = m
             .iter()
             .map(|e| match e {
@@ -367,6 +374,17 @@ mod tests {
         );
         assert_eq!(
             enabled_ids(&m),
+            [
+                "open",
+                "set_time",
+                "sync_1password",
+                "check_updates",
+                "quit"
+            ]
+        );
+        // No `op` CLI: sync stays greyed out even when unlocked.
+        assert_eq!(
+            enabled_ids(&model(&prefs, &unlocked, false)),
             ["open", "set_time", "check_updates", "quit"]
         );
         for state in [
@@ -376,7 +394,7 @@ mod tests {
             DeviceState::Locked,
             DeviceState::ConfigMode,
         ] {
-            let m = model(&prefs, &snap(state, None));
+            let m = model(&prefs, &snap(state, None), true);
             assert_eq!(
                 enabled_ids(&m),
                 ["open", "check_updates", "quit"],

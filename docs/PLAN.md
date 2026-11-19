@@ -41,7 +41,7 @@ PARITY §4 for those six pages, including PrivateKeySelectDialog and AppUpdateDi
 ## 13. [x] Packaging + CI — Medium — after: 6, 7, 12
 Tauri bundle config (dmg universal, NSIS, deb with udev rules + postinst, AppImage), GitHub Actions: test/clippy/fmt on 3 OSes; release workflow building installers, signing updater artifacts, publishing `latest.json`; Pages deploy for the web build. Verify: `cargo tauri build` locally on macOS; workflows pass `actionlint`.
 
-## 15. [ ] 1Password sync — Careful — after: 5, 6, 10
+## 15. [x] 1Password sync — Careful — after: 5, 6, 10
 SPEC §1Password sync. Core `onepassword` module (pure: item JSON → slot plan via the existing slot builder, limits, otpauth secret, duplicate-tag error, out-of-date logic) with tests on canned `op` JSON (fixtures with fake data only). `src-tauri/src/onepassword.rs`: find `op`, run without a shell, 60 s timeout, `Zeroizing` buffers, commands `op_status`, `op_list`, `op_sync(slots)`, `op_item(id)`; links in prefs; tray item. UI: Slots "Sync from 1Password" + badges, SlotEditor "Fill from 1Password" picker. Verify: `cargo test -p onlykey-core onepassword::`; on this Mac `op` 2.42 is installed — run `op_status`/`op_list` live (report result; do not print secrets).
 
 ## 14. [ ] Parity audit — Heavy — after: 9, 10, 11, 12, 13, 15

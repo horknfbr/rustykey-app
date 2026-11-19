@@ -2,6 +2,7 @@
 
 use super::{AppUpdate, Backend, FirmwareRelease, Platform, Prefs};
 use onlykey_core::api::{Command, DeviceError, Event, Reply, Snapshot};
+use onlykey_core::onepassword::{ItemFill, LinkedSlot, OpLogin, OpStatus, SlotSyncResult};
 use serde::{Serialize, de::DeserializeOwned};
 use wasm_bindgen::prelude::*;
 
@@ -207,6 +208,43 @@ impl Backend for TauriBackend {
     /// `fw_download` (blocks as arrays of bytes).
     async fn fw_download(&self) -> Result<Vec<Vec<u8>>, String> {
         call("fw_download", NoArgs {}).await.map_err(error_text)
+    }
+
+    /// `op_status`.
+    async fn op_status(&self) -> Result<OpStatus, String> {
+        call("op_status", NoArgs {}).await.map_err(error_text)
+    }
+
+    /// `op_list`.
+    async fn op_list(&self) -> Result<Vec<LinkedSlot>, String> {
+        call("op_list", NoArgs {}).await.map_err(error_text)
+    }
+
+    /// `op_sync { slots }`.
+    async fn op_sync(&self, slots: Option<Vec<u8>>) -> Result<Vec<SlotSyncResult>, String> {
+        /// Args of `op_sync`.
+        #[derive(Serialize)]
+        struct Args {
+            /// Slots to sync; `None` = every linked slot.
+            slots: Option<Vec<u8>>,
+        }
+        call("op_sync", Args { slots }).await.map_err(error_text)
+    }
+
+    /// `op_logins`.
+    async fn op_logins(&self) -> Result<Vec<OpLogin>, String> {
+        call("op_logins", NoArgs {}).await.map_err(error_text)
+    }
+
+    /// `op_item_form { id }`.
+    async fn op_item_form(&self, id: &str) -> Result<ItemFill, String> {
+        /// Args of `op_item_form`.
+        #[derive(Serialize)]
+        struct Args<'a> {
+            /// 1Password item ID.
+            id: &'a str,
+        }
+        call("op_item_form", Args { id }).await.map_err(error_text)
     }
 
     /// Always desktop.

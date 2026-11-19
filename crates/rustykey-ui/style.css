@@ -535,3 +535,20 @@ input.narrow { width: 96px; }
 .key-candidate:hover { background: var(--line); }
 .key-candidate-name { font-weight: 600; }
 .page > .modal-backdrop { max-width: none; }
+
+/* 1Password sync (Slots page, desktop only) */
+.op-sync { display: flex; flex-direction: column; gap: var(--space); }
+.op-sync p { margin: 0; }
+.op-sync-row { display: flex; align-items: center; gap: var(--space); flex-wrap: wrap; }
+.op-sync-results { margin: 0; padding-left: calc(var(--space) * 2); font-size: 14px; }
+.slot-pill-wrap { position: relative; }
+.slot-link-badge { position: absolute; top: calc(var(--space) * -1); right: calc(var(--space) * -1); font-size: 11px; font-weight: 600; line-height: 16px; padding: 0 calc(var(--space) / 2); border: 1px solid; border-radius: var(--radius); background: var(--bg); white-space: nowrap; pointer-events: none; }
+.slot-link-badge--linked { color: var(--ok); }
+.slot-link-badge--stale { color: var(--accent); }
+.slot-link-badge--duplicate { color: var(--danger); }
+.op-picker { display: flex; flex-direction: column; gap: var(--space); min-width: min(28rem, 80vw); }
+.op-picker-search { width: 100%; }
+.op-picker-list { list-style: none; margin: 0; padding: 0; max-height: 18rem; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.op-picker-item { display: flex; justify-content: space-between; gap: var(--space); width: 100%; padding: var(--space); background: none; border: none; border-bottom: 1px solid var(--line); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.op-picker-item:hover:not(:disabled) { background: var(--surface); }
+.op-picker-item:disabled { opacity: 0.5; cursor: wait; }

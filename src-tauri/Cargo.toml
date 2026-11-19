@@ -22,6 +22,7 @@ serde_json = "1.0.154"
 tauri-plugin-updater = "2"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+zeroize = "1"
 
 # hidapi backend per OS. Linux: hidraw (reports usage pages; libusb does not). macOS: open
 # non-exclusively so other apps keep the key. Windows: the native backend.

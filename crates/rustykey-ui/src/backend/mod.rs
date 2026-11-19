@@ -1,6 +1,7 @@
 //! The only door from the UI to the device and the host: the `Backend` trait and the impl chosen by cargo feature.
 
 use onlykey_core::api::{Command, DeviceError, Event, Reply, Snapshot};
+use onlykey_core::onepassword::{ItemFill, LinkedSlot, OpLogin, OpStatus, SlotSyncResult};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "fake")]
@@ -70,6 +71,9 @@ impl Default for Prefs {
     }
 }
 
+/// What the 1Password methods answer on hosts without the `op` CLI (the web build).
+pub const OP_DESKTOP_ONLY: &str = "1Password sync is only available in the desktop app.";
+
 /// A newer app release found by [`Backend::app_update_check`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppUpdate {
@@ -129,4 +133,24 @@ pub trait Backend {
     async fn fw_check(&self, force: bool) -> Result<Option<FirmwareRelease>, String>;
     /// Downloads the latest STD firmware (allowlist + SHA-256 checked, 60 s timeout) as blocks for `LoadFirmware`.
     async fn fw_download(&self) -> Result<Vec<Vec<u8>>, String>;
+    /// Whether the 1Password CLI is usable (never prompts Touch ID).
+    async fn op_status(&self) -> Result<OpStatus, String> {
+        Err(OP_DESKTOP_ONLY.into())
+    }
+    /// Items tagged `onlykey/slot-N` with their link state (no secrets).
+    async fn op_list(&self) -> Result<Vec<LinkedSlot>, String> {
+        Err(OP_DESKTOP_ONLY.into())
+    }
+    /// Writes linked 1Password items to the device (all linked slots, or just `slots`).
+    async fn op_sync(&self, _slots: Option<Vec<u8>>) -> Result<Vec<SlotSyncResult>, String> {
+        Err(OP_DESKTOP_ONLY.into())
+    }
+    /// Login items for the editor's picker (titles only).
+    async fn op_logins(&self) -> Result<Vec<OpLogin>, String> {
+        Err(OP_DESKTOP_ONLY.into())
+    }
+    /// One item mapped to slot editor values (secrets; call only on the user's explicit pick).
+    async fn op_item_form(&self, _id: &str) -> Result<ItemFill, String> {
+        Err(OP_DESKTOP_ONLY.into())
+    }
 }

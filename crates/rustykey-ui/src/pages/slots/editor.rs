@@ -3,6 +3,7 @@
 //! Typed secrets live only in this component's signals and are cleared after a save.
 
 use super::generator::PasswordGenerator;
+use super::onepassword::{OpPicker, op_supported};
 use super::{refresh_labels, slot_label};
 use crate::backend::{Backend, Prefs, backend};
 use crate::components::{Button, ButtonKind, HelpTip, Modal, Notice, NoticeKind};
@@ -10,6 +11,7 @@ use crate::state::use_app;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use onlykey_core::api::{DeviceError, DeviceKind};
+use onlykey_core::onepassword::ItemFill;
 use onlykey_core::protocol::{
     NEXTKEY_AFTER_FIELD_OPTIONS, NEXTKEY_AFTER_OTP_OPTIONS, NEXTKEY_BEFORE_FIELD_OPTIONS,
 };
@@ -209,6 +211,7 @@ pub fn SlotEditor(
     let error = RwSignal::new(None::<String>);
     let saving = RwSignal::new(false);
     let gen_open = RwSignal::new(false);
+    let picker_open = RwSignal::new(false);
 
     let select_mode = move |m: &'static str| {
         mode.set(m);
@@ -221,9 +224,10 @@ pub fn SlotEditor(
         });
     };
 
-    // Esc closes only when nothing is stacked on top (generator, confirm, working).
+    // Esc closes only when nothing is stacked on top (generator, 1Password picker, confirm, working).
     let close = Callback::new(move |()| {
         let busy = gen_open.get_untracked()
+            || picker_open.get_untracked()
             || app.confirm.with_untracked(Option::is_some)
             || app.working.with_untracked(Option::is_some);
         if !busy {
@@ -282,6 +286,28 @@ pub fn SlotEditor(
             finish(res);
         });
     };
+
+    // "Fill from 1Password": checks and fills the fields the item has. DUO without PIN skips
+    // username and URL (no tab shows them there). Nothing is written until Set Slot.
+    let fill = Callback::new(move |mut f: ItemFill| {
+        let put = |field: Field, value: Option<String>| {
+            if let Some(v) = value {
+                field.val.set(v);
+                field.on.set(true);
+            }
+        };
+        put(form.label, f.label.take());
+        if !duo_no_pin {
+            put(form.url, f.url.take());
+            put(form.username, f.username.take());
+        }
+        if let Some(pw) = f.password.take() {
+            form.confirm.set(pw.clone());
+            put(form.password, Some(pw));
+        }
+        put(form.totp, f.totp.take());
+        error.set(None);
+    });
 
     let advanced = move || mode.get() == "advanced";
     view! {
@@ -389,8 +415,19 @@ pub fn SlotEditor(
                     <Button kind=ButtonKind::Danger disabled=saving on:click=wipe>
                         "Wipe All Slot Data"
                     </Button>
-                    // Room for the future "Fill from 1Password" button (task 15).
                     <div class="slot-editor-actions-end">
+                        {op_supported()
+                            .then(|| {
+                                view! {
+                                    <Button
+                                        kind=ButtonKind::Secondary
+                                        disabled=saving
+                                        on:click=move |_| picker_open.set(true)
+                                    >
+                                        "Fill from 1Password"
+                                    </Button>
+                                }
+                            })}
                         <Button kind=ButtonKind::Secondary on:click=move |_| on_close.run(())>
                             "Cancel"
                         </Button>
@@ -412,6 +449,18 @@ pub fn SlotEditor(
                                     form.confirm.set(pw);
                                     form.password.on.set(true);
                                 })
+                            />
+                        }
+                    })
+            }}
+            {move || {
+                picker_open
+                    .get()
+                    .then(|| {
+                        view! {
+                            <OpPicker
+                                on_close=Callback::new(move |()| picker_open.set(false))
+                                on_fill=fill
                             />
                         }
                     })
