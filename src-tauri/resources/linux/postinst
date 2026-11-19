@@ -1,0 +1,4 @@
+#!/bin/sh
+# RustyKey .deb post-install: load the OnlyKey udev rules without a reboot.
+udevadm control --reload-rules && udevadm trigger || true
+exit 0

@@ -30,7 +30,27 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": "all",
+    "targets": ["app", "dmg", "nsis", "deb", "appimage"],
+    "shortDescription": "Configure OnlyKey hardware keys",
+    "longDescription": "Configure OnlyKey hardware keys: PINs, slots, keys, backups, firmware and settings.",
+    "copyright": "Copyright (c) 2026 horknfbr. MIT License.",
+    "category": "Utility",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "/etc/udev/rules.d/49-rustykey.rules": "resources/linux/49-rustykey.rules"
+        },
+        "postInstallScript": "resources/linux/postinst"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

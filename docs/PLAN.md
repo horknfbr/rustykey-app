@@ -38,7 +38,7 @@ PARITY §4 for those six pages, including PrivateKeySelectDialog and AppUpdateDi
 ## 12. [x] Web build for ChromeOS — Careful — after: 3, 8
 `web` Backend: WebHID driver running the core engine (SPEC §Web build), localStorage prefs, file input / download, connect button, web manifest, hide desktop-only controls. Verify: `trunk build --release --features web`; served locally, Chrome shows the WebHID picker with the OnlyKey filter.
 
-## 13. [ ] Packaging + CI — Medium — after: 6, 7, 12
+## 13. [x] Packaging + CI — Medium — after: 6, 7, 12
 Tauri bundle config (dmg universal, NSIS, deb with udev rules + postinst, AppImage), GitHub Actions: test/clippy/fmt on 3 OSes; release workflow building installers, signing updater artifacts, publishing `latest.json`; Pages deploy for the web build. Verify: `cargo tauri build` locally on macOS; workflows pass `actionlint`.
 
 ## 15. [ ] 1Password sync — Careful — after: 5, 6, 10

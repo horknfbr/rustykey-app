@@ -1,0 +1,31 @@
+# udev rules for OnlyKey, installed by the RustyKey .deb at /etc/udev/rules.d/49-rustykey.rules.
+# Manual install (AppImage): sudo cp 49-rustykey.rules /etc/udev/rules.d/ &&
+#   sudo udevadm control --reload-rules && sudo udevadm trigger, then replug the OnlyKey.
+# TAG+="uaccess" gives the logged-in seat user access (no world-writable 0666 as upstream).
+# Must sort before 73-seat-late.rules, which applies uaccess.
+
+# DUO
+ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="614c", ENV{ID_MM_DEVICE_IGNORE}="1", ENV{MTP_NO_PROBE}="1"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="614c", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="614c", MODE="0660", TAG+="uaccess"
+ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="614e", ENV{ID_MM_DEVICE_IGNORE}="1", ENV{MTP_NO_PROBE}="1"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="614e", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="614e", MODE="0660", TAG+="uaccess"
+ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="4211", ENV{ID_MM_DEVICE_IGNORE}="1", ENV{MTP_NO_PROBE}="1"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="4211", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="20a0", ATTRS{idProduct}=="4211", MODE="0660", TAG+="uaccess"
+
+# Classic, pre-Beta 8
+ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="0486", ENV{ID_MM_DEVICE_IGNORE}="1", ENV{MTP_NO_PROBE}="1"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="0486", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="0486", MODE="0660", TAG+="uaccess"
+
+# Beta 7+ or DUO
+ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="60fc", ENV{ID_MM_DEVICE_IGNORE}="1", ENV{MTP_NO_PROBE}="1"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="60fc", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="60fc", MODE="0660", TAG+="uaccess"
+
+# Bootloader (firmware update)
+ATTRS{idVendor}=="0000", ATTRS{idProduct}=="b001", ENV{ID_MM_DEVICE_IGNORE}="1", ENV{MTP_NO_PROBE}="1"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0000", ATTRS{idProduct}=="b001", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0000", ATTRS{idProduct}=="b001", MODE="0660", TAG+="uaccess"

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  native:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libudev-dev libssl-dev libxdo-dev build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # tauri::generate_context! needs frontendDist to exist; the real UI is checked in the wasm job.
+      - name: Stub frontend dist
+        shell: bash
+        run: mkdir -p crates/rustykey-ui/dist && touch crates/rustykey-ui/dist/index.html
+
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace
+
+  wasm:
+    name: UI (wasm) + web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
+
+      - name: Clippy (tauri backend)
+        run: cargo clippy -p rustykey-ui --target wasm32-unknown-unknown --all-targets --no-default-features --features tauri -- -D warnings
+      - name: Clippy (fake backend)
+        run: cargo clippy -p rustykey-ui --target wasm32-unknown-unknown --all-targets --no-default-features --features fake -- -D warnings
+      - name: Clippy (web backend)
+        run: cargo clippy -p rustykey-ui --target wasm32-unknown-unknown --all-targets --no-default-features --features web -- -D warnings
+      - name: Core builds for wasm
+        run: cargo build -p onlykey-core --target wasm32-unknown-unknown
+
+      - name: Web release build
+        working-directory: crates/rustykey-ui
+        run: trunk build --release --config Trunk.web.toml
