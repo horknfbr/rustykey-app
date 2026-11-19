@@ -23,16 +23,16 @@ SPEC §Tray, §src-tauri Window/Prefs/Autostart: tray menu rebuilt on every chan
 ## 7. [ ] Desktop: app + firmware updates — Medium — after: 5
 Updater plugin (SPEC §App updates) and firmware fetch (PARITY §5 Firmware, SPEC §Firmware fetch) with commands `app_update_check/install`, `fw_check/fw_download`, once-per-session + pref gating + timeouts. Unit-test the redirect allowlist and digest check with canned JSON. Document key generation (`cargo tauri signer generate`) in `docs/RELEASE.md`. Verify: tests; a live `fw_check` against GitHub returns the current firmware version.
 
-## 8. [ ] UI: shell, bridge, lock screen — Medium — after: 2
+## 8. [x] UI: shell, bridge, lock screen — Medium — after: 2
 Leptos app per SPEC §rustykey-ui and §Design: `Backend` trait + `tauri` impl, state signals, sidebar with all 8 tabs (placeholder pages), status block, DeviceMessages terminal, disconnected overlay, LockScreen (DUO + Classic, 1500 ms poll), WorkingDialog (progress), ConfirmDialog, udev/permission dialog, theme toggle, default-tab rules, epoch keying. Verify: `trunk build`, `cargo tauri dev` screenshots dark + light.
 
-## 9. [ ] UI: Setup wizard — Medium — after: 8, 4
+## 9. [x] UI: Setup wizard — Medium — after: 8, 4
 PARITY §4 Setup, Classic and DUO flows, all steps, validation, cancel. Uses core command builders. Verify: `trunk build`; walk every step against `reference/OnlyKey-App/src/components/Setup.tsx` and list them in the report.
 
-## 10. [ ] UI: Slots + editor + generator — Medium — after: 8
+## 10. [x] UI: Slots + editor + generator — Medium — after: 8
 PARITY §4 Slots/SlotEditor/Password generator, device photos, DUO profiles, field enable checkboxes, validation, write order (core builder), wipe. Verify: `trunk build`; screenshot Classic + DUO grid with mock data.
 
-## 11. [ ] UI: Keys, Backup, Firmware, Preferences, Advanced, Tools — Medium — after: 8, 4
+## 11. [x] UI: Keys, Backup, Firmware, Preferences, Advanced, Tools — Medium — after: 8, 4
 PARITY §4 for those six pages, including PrivateKeySelectDialog and AppUpdateDialog / FirmwareUpdateDialog. Verify: `trunk build`; per-page control checklist vs the TS component.
 
 ## 12. [ ] Web build for ChromeOS — Careful — after: 3, 8

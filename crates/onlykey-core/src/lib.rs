@@ -11,6 +11,7 @@ pub mod onepassword;
 pub mod parser;
 pub mod password;
 pub mod protocol;
+pub mod slot;
 pub mod transport;
 
 /// Crate version, from Cargo.toml.

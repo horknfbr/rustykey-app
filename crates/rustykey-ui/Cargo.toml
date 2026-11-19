@@ -11,10 +11,21 @@ default = ["tauri"]
 tauri = []
 # Browser build (ChromeOS, WebHID). Build with `--no-default-features --features web`.
 web = []
+# Browser dev/screenshot build with a fake device. `--no-default-features --features fake`.
+fake = []
 
 [dependencies]
+futures = "0.3"
+getrandom = { version = "0.4", features = ["sys_rng", "wasm_js"] }
+js-sys = "0.3"
 leptos = { version = "0.8", features = ["csr"] }
 onlykey-core = { path = "../onlykey-core" }
+rand_core = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Document", "Element", "DomTokenList", "HtmlElement", "KeyboardEvent", "Navigator", "WheelEvent", "Window"] }
 
 [lints]
 workspace = true
