@@ -1858,6 +1858,7 @@ dependencies = [
  "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "rand_core 0.10.1",
  "wasm-bindgen",
 ]
 
@@ -2099,6 +2100,19 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hidapi"
+version = "2.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "818c0e1d27887aaf76fe737042e27a66b796a7b099e6d2e1a72d106c2dff3fa6"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "pkg-config",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "hkdf"
@@ -4342,9 +4356,12 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 name = "rustykey"
 version = "0.1.0"
 dependencies = [
+ "hidapi",
  "onlykey-core",
+ "serde",
  "tauri",
  "tauri-build",
+ "tokio",
 ]
 
 [[package]]
@@ -4352,9 +4369,11 @@ name = "rustykey-ui"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "getrandom 0.4.3",
  "js-sys",
  "leptos",
  "onlykey-core",
+ "rand_core 0.10.1",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",

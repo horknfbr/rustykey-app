@@ -14,7 +14,7 @@ Cargo workspace (`crates/onlykey-core`, `crates/rustykey-ui`, `src-tauri`) per S
 ## 4. [x] Core: key import — Careful — after: 2
 `keys`: OpenPGP (rpgp) and SSH/PEM parsing to device bytes + type byte, candidates, Auto Load rules, explicit-slot selection error, backup-passphrase key (sha256), Advanced raw-hex keys, and `Vec<Command>` builders. PARITY §3. Test fixtures: generate keys with `gpg`/`ssh-keygen` (RSA 2048/4096, ed25519/cv25519, P-256, secp256k1 where tools allow), encrypted with a known passphrase, committed under `crates/onlykey-core/tests/fixtures/` (test-only keys). Must compile for wasm32 (`cargo build -p onlykey-core --target wasm32-unknown-unknown`). Verify: tests assert exact bytes (p‖q, scalars) and type bytes.
 
-## 5. [ ] Desktop: HID service + commands — Careful — after: 3
+## 5. [x] Desktop: HID service + commands — Careful — after: 3
 `src-tauri/src/device/`: hidapi driver thread per SPEC §src-tauri, interface selection (PARITY §1), 2 s rescan, connect watchdog, unplug detection, permission error → `connect_error`, pending firmware resume on PID B001, events to webview. Tauri commands `device` and `snapshot`; capabilities file. Verify: unit test for interface selection with fake device-info lists; `cargo build -p rustykey`; manual run with a device if available (report if not).
 
 ## 6. [ ] Desktop: tray, window, prefs, autostart — Medium — after: 5

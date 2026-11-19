@@ -11,6 +11,24 @@ tauri-build = { version = "2.5", features = [] }
 [dependencies]
 tauri = { version = "2.12", features = [] }
 onlykey-core = { path = "../crates/onlykey-core" }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["sync"] }
+
+# hidapi backend per OS. Linux: hidraw (reports usage pages; libusb does not). macOS: open
+# non-exclusively so other apps keep the key. Windows: the native backend.
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["linux-static-hidraw"] }
+[target.'cfg(target_os = "macos")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["macos-shared-device"] }
+[target.'cfg(windows)'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
+
+[dev-dependencies]
+onlykey-core = { path = "../crates/onlykey-core", features = ["mock"] }
+
+[features]
+# Dev aid: `RUSTYKEY_MOCK=classic|duo|uninitialized|bootloader` drives a simulated device.
+mock = ["onlykey-core/mock"]
 
 [lints]
 workspace = true
